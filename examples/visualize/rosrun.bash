@@ -6,7 +6,8 @@ echo "(Optional) Enter index (0-) of the desired z-coordinates. If no z-coordina
 read z_index
 
 echo $x_index $y_index $z_index > "coordinate_indices.txt"
+source /opt/ros/humble/setup.bash
 colcon build --packages-select visualize
 source install/local_setup.bash
 ros2 run visualize ros_visualize
-ros2 run rviz2 rviz2
+# ros2 run rviz2 rviz2

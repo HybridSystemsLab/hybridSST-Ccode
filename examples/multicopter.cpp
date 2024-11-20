@@ -9,6 +9,9 @@
 #include "ompl/base/Planner.h"
 #include "ompl/base/spaces/RealVectorStateSpace.h"
 #include "ompl/base/objectives/StateCostIntegralObjective.h"
+#include "ompl/geometric/PathGeometric.h"
+#include <fstream> // For file I/O
+#include <iomanip> // For formatting output
 
 using namespace CommonMath;
 
@@ -514,4 +517,8 @@ int main()
     // attempt to solve the planning problem within 10 seconds
     ompl::base::PlannerStatus solved = cHySST.solve(ompl::base::timedPlannerTerminationCondition(10000000));
     // std::cout << "solution status: " << solved << std::endl;
+
+    // print path to RViz2 data file
+    std::ofstream outFile("../../examples/visualize/src/points.txt");
+    pdef->getSolutionPath()->as<ompl::geometric::PathGeometric>()->printAsMatrix(outFile);
 }
