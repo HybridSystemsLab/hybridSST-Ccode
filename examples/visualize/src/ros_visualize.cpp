@@ -37,6 +37,11 @@ std::vector<std::vector<double>> read_file_as_matrix(std::string file_name)
     while (std::getline(file, line))
     {
         std::istringstream iss(line);
+
+        if (line.empty()) {
+            break;
+        }
+        
         std::vector<double> row;
         double value;
         while (iss >> value)
