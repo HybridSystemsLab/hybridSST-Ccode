@@ -406,6 +406,12 @@ namespace ompl
 
                 /// \brief The integration steps defining the edge of the motion, between the parent and child vertices
                 std::vector<base::State *> *solutionPair{nullptr};
+
+                /// \brief The inputs associated with the solution pair
+                std::vector<ompl::control::Control *> *inputs = new std::vector<ompl::control::Control *>();
+
+                /// \brief The hybrid time parameterizing each state in the solution pair
+                std::vector<std::pair<double, int>> *hybridTime = new std::vector<std::pair<double, int>>();
             };
 
             class Witness : public Motion
