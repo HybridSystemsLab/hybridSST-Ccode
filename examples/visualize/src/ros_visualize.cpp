@@ -50,6 +50,17 @@ std::vector<std::vector<double>> read_file_as_matrix(std::string file_name)
     return matrix;
 }
 
+// Function to read a file and store its contents as a matrix
+std::string read_file_as_string(std::string file_name)
+{
+    std::ifstream file(file_name);
+    std::string line;
+    std::getline(file, line);
+    std::istringstream iss(line);
+
+    return line;
+}
+
 // Class to publish the trajectory and obstacles as a point matrix and obstacles as ROS markers
 class PointMatrixPublisher : public rclcpp::Node
 {
@@ -57,20 +68,20 @@ public:
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_pub_;
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr marker_pub;
     rclcpp::TimerBase::SharedPtr timer_;
-    PointMatrixPublisher(std::vector<std::vector<double>> matrix, std::vector<double> index_matrix) : Node("point_matrix_publisher")
+    PointMatrixPublisher(std::vector<std::vector<double>> matrix, std::vector<double> index_matrix, std::string obstacle) : Node("point_matrix_publisher")
     {
         // Create publishers for point matrix and obstacles
         marker_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("point_matrix", 10);
         marker_pub = this->create_publisher<visualization_msgs::msg::Marker>("obstacles", 10);
         
         // Create a timer to publish points periodically
-        timer_ = this->create_wall_timer(std::chrono::milliseconds(1000), [this, matrix, index_matrix]()
-                                         { this->publishPoints(matrix, index_matrix); });
+        timer_ = this->create_wall_timer(std::chrono::milliseconds(1000), [this, matrix, index_matrix, obstacle]()
+                                         { this->publishPoints(matrix, index_matrix, obstacle); });
     }
 
 private:
     // Function to publish points and obstacles as ROS markers
-    void publishPoints(std::vector<std::vector<double>> matrix, std::vector<double> index_matrix)
+    void publishPoints(std::vector<std::vector<double>> matrix, std::vector<double> index_matrix, std::string obstacle)
     {
         auto marker_array_msg = std::make_shared<visualization_msgs::msg::MarkerArray>();
 
@@ -137,76 +148,79 @@ private:
             marker_array_msg->markers.push_back(lines);
         }
 
-        // Define and publish obstacles as ROS markers
-        visualization_msgs::msg::Marker obs1, obs2, obs3, obs4;
-        rclcpp::Node::SharedPtr node = rclcpp::Node::make_shared("talker");
-        rclcpp::Time now = node->get_clock()->now();
-        rclcpp::Duration lifetime_time(0, 0); // 0 makes it forever
+        if(obstacle.find("y") != std::string::npos) {
+            // Define and publish obstacles as ROS markers
+            visualization_msgs::msg::Marker obs1, obs2, obs3, obs4;
+            rclcpp::Node::SharedPtr node = rclcpp::Node::make_shared("talker");
+            rclcpp::Time now = node->get_clock()->now();
+            rclcpp::Duration lifetime_time(0, 0); // 0 makes it forever
 
-        obs1.type = obs2.type = obs3.type = obs4.type = visualization_msgs::msg::Marker::CUBE;
-        obs1.header.frame_id = obs2.header.frame_id = obs3.header.frame_id = obs4.header.frame_id = "/map";
+            obs1.type = obs2.type = obs3.type = obs4.type = visualization_msgs::msg::Marker::CUBE;
+            obs1.header.frame_id = obs2.header.frame_id = obs3.header.frame_id = obs4.header.frame_id = "/map";
 
-        obs1.header.stamp = obs2.header.stamp = obs3.header.stamp = obs4.header.stamp = now;
-        obs1.ns = obs2.ns = obs3.ns = obs4.ns = "obstacles";
-        obs1.lifetime = obs2.lifetime = obs3.lifetime = obs4.lifetime = lifetime_time;
-        obs1.action = obs2.action = obs3.action = obs4.action = visualization_msgs::msg::Marker::ADD;
+            obs1.header.stamp = obs2.header.stamp = obs3.header.stamp = obs4.header.stamp = now;
+            obs1.ns = obs2.ns = obs3.ns = obs4.ns = "obstacles";
+            obs1.lifetime = obs2.lifetime = obs3.lifetime = obs4.lifetime = lifetime_time;
+            obs1.action = obs2.action = obs3.action = obs4.action = visualization_msgs::msg::Marker::ADD;
 
-        obs1.id = 0;
-        obs2.id = 1;
-        obs3.id = 2;
-        obs4.id = 3;
+            obs1.id = 0;
+            obs2.id = 1;
+            obs3.id = 2;
+            obs4.id = 3;
 
-        // Set the dimensions and positions of the obstacles
-        obs1.scale.x = obs2.scale.x = 4.5;
-        obs1.scale.y = obs2.scale.y = 0.5;
-        obs3.scale.y = 1;
-        obs3.scale.x = 0.5;
-        obs4.scale.x = 2;
-        obs4.scale.y = 0.5;
+            // Set the dimensions and positions of the obstacles
+            obs1.scale.x = obs2.scale.x = 4.5;
+            obs1.scale.y = obs2.scale.y = 0.5;
+            obs3.scale.y = 1;
+            obs3.scale.x = 0.5;
+            obs4.scale.x = 2;
+            obs4.scale.y = 0.5;
 
-        obs1.scale.z = obs2.scale.z = obs3.scale.z = obs4.scale.z = 0;
+            obs1.scale.z = obs2.scale.z = obs3.scale.z = obs4.scale.z = 0;
 
-        obs1.pose.position.x = obs1.scale.x / 2; // flat 2x12 rect @ (8, 6)
-        obs1.pose.position.y = 3 - obs1.scale.x / 2 + 2;
-        // obs1.pose.position.z = 0.25;
-        obs1.pose.orientation.x = 0.0;
-        obs1.pose.orientation.y = 0.0;
-        obs1.pose.orientation.z = 0.0;
-        obs1.pose.orientation.w = 1;
-        obs1.color.a = 1;
-        obs1.color.r = obs1.color.g = obs1.color.b = 255.0f;
+            obs1.pose.position.x = obs1.scale.x / 2; // flat 2x12 rect @ (8, 6)
+            obs1.pose.position.y = 3 - obs1.scale.x / 2 + 2;
+            // obs1.pose.position.z = 0.25;
+            obs1.pose.orientation.x = 0.0;
+            obs1.pose.orientation.y = 0.0;
+            obs1.pose.orientation.z = 0.0;
+            obs1.pose.orientation.w = 1;
+            obs1.color.a = 1;
+            obs1.color.r = obs1.color.g = obs1.color.b = 255.0f;
 
-        obs2.pose.position.x = obs2.scale.x / 2; // flat 2x12 rect @ (14, 14)
-        obs2.pose.position.y = 1.5 - obs2.scale.x / 2 + 2;
-        // obs2.pose.position.z = 0.25;
-        obs2.pose.orientation.x = 0.0;
-        obs2.pose.orientation.y = 0.0;
-        obs2.pose.orientation.z = 0.0;
-        obs2.pose.orientation.w = 1;
-        obs2.color.a = 1;
-        obs2.color.r = obs2.color.g = obs2.color.b = 255.0f;
+            obs2.pose.position.x = obs2.scale.x / 2; // flat 2x12 rect @ (14, 14)
+            obs2.pose.position.y = 1.5 - obs2.scale.x / 2 + 2;
+            // obs2.pose.position.z = 0.25;
+            obs2.pose.orientation.x = 0.0;
+            obs2.pose.orientation.y = 0.0;
+            obs2.pose.orientation.z = 0.0;
+            obs2.pose.orientation.w = 1;
+            obs2.color.a = 1;
+            obs2.color.r = obs2.color.g = obs2.color.b = 255.0f;
 
-        obs3.pose.position.x = obs3.scale.x / 2; // flat 7x4 rect @ (16.5, 2)
-        obs3.pose.position.y = .5 - obs3.scale.y / 2 + 2;
-        // obs3.pose.position.z = 0.25;
-        obs3.pose.orientation.x = 0.0;
-        obs3.pose.orientation.y = 0.0;
-        obs3.pose.orientation.z = 0.0;
-        obs3.pose.orientation.w = 1;
-        obs3.color.a = 1;
-        obs3.color.r = obs3.color.g = obs3.color.b = 255.0f;
+            obs3.pose.position.x = obs3.scale.x / 2; // flat 7x4 rect @ (16.5, 2)
+            obs3.pose.position.y = .5 - obs3.scale.y / 2 + 2;
+            // obs3.pose.position.z = 0.25;
+            obs3.pose.orientation.x = 0.0;
+            obs3.pose.orientation.y = 0.0;
+            obs3.pose.orientation.z = 0.0;
+            obs3.pose.orientation.w = 1;
+            obs3.color.a = 1;
+            obs3.color.r = obs3.color.g = obs3.color.b = 255.0f;
 
-        obs4.pose.position.x = 1;
-        obs4.pose.position.y = 1;
-        obs4.pose.orientation.x = 0.0;
-        obs4.pose.orientation.y = 0.0;
-        obs4.pose.orientation.z = 0.0;
-        obs4.color.a = 1;
-        obs4.color.r = obs4.color.g = obs4.color.b = 255.0f;
+            obs4.pose.position.x = 1;
+            obs4.pose.position.y = 1;
+            obs4.pose.orientation.x = 0.0;
+            obs4.pose.orientation.y = 0.0;
+            obs4.pose.orientation.z = 0.0;
+            obs4.color.a = 1;
+            obs4.color.r = obs4.color.g = obs4.color.b = 255.0f;
 
-        marker_pub->publish(obs1);
-        marker_pub->publish(obs2);
-        marker_pub->publish(obs3);
+            // Comment out these next three lines if you are running the bouncing_ball visualization
+            marker_pub->publish(obs1);
+            marker_pub->publish(obs2);
+            marker_pub->publish(obs3);
+        }
 
         marker_pub_->publish(*marker_array_msg);
     }
@@ -219,8 +233,9 @@ int main(int argc, char *argv[])
     // Read the coordinate indices and points from files
     std::vector<double> index_matrix = read_file_as_matrix("coordinate_indices.txt")[0];
     std::vector<std::vector<double>> matrix = read_file_as_matrix("src/points.txt");
+    std::string obstacle = read_file_as_string("obstacles.txt");
 
     // Create and spin the PointMatrixPublisher node
-    rclcpp::spin(std::make_shared<PointMatrixPublisher>(matrix, index_matrix));
+    rclcpp::spin(std::make_shared<PointMatrixPublisher>(matrix, index_matrix, obstacle));
     return 0;
 }
