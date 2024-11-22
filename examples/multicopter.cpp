@@ -450,6 +450,9 @@ public:
 
 int main()
 {
+    std::uint_fast32_t seed = 1;
+    ompl::RNG::setSeed(seed);
+    
     // Set the bounds of space
     ompl::base::RealVectorStateSpace *statespace = new ompl::base::RealVectorStateSpace(0);
     statespace->addDimension(0.5, 6.0);
