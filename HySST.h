@@ -40,6 +40,7 @@
 
 #include "ompl/geometric/planners/PlannerIncludes.h"
 #include "ompl/datastructures/NearestNeighbors.h"
+#include "ompl/control/Control.h"
 
 namespace ompl
 {
