@@ -43,7 +43,8 @@
 #include "ompl/tools/config/SelfConfig.h"
 #include "ompl/base/spaces/RealVectorStateSpace.h"
 #include <limits>
-#include <ompl/base/goals/GoalState.h>
+#include "ompl/base/goals/GoalState.h"
+#include "ompl/control/Contro.h"
 
 ompl::geometric::HySST::HySST(const base::SpaceInformationPtr &si) : base::Planner(si, "HySST")
 {
