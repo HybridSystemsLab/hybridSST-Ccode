@@ -457,7 +457,7 @@ public:
 
 int main()
 {
-    std::uint_fast32_t seed = 1;
+    std::uint_fast32_t seed = 7;
     ompl::RNG::setSeed(seed);
     
     // Set the bounds of space
@@ -485,7 +485,7 @@ int main()
     start->as<ompl::base::RealVectorStateSpace::StateType>()->values[0] = 1;
     start->as<ompl::base::RealVectorStateSpace::StateType>()->values[1] = 2;
     start->as<ompl::base::RealVectorStateSpace::StateType>()->values[2] = 0;
-    start->as<ompl::base::RealVectorStateSpace::StateType>()->values[3] = -1;
+    start->as<ompl::base::RealVectorStateSpace::StateType>()->values[3] = 0;
     start->as<ompl::base::RealVectorStateSpace::StateType>()->values[4] = 0;
     start->as<ompl::base::RealVectorStateSpace::StateType>()->values[5] = 0;
     start->as<ompl::base::RealVectorStateSpace::StateType>()->values[6] = 0;
