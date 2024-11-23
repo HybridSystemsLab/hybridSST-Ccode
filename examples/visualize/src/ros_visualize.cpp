@@ -36,6 +36,8 @@ std::vector<std::vector<double>> read_file_as_matrix(std::string file_name)
     std::vector<std::vector<double>> matrix;
     while (std::getline(file, line))
     {
+        if(line.empty())    // Reached end of matrix
+            break;
         std::istringstream iss(line);
 
         if (line.empty()) {
@@ -140,7 +142,7 @@ private:
             else
             {
                 marker.type = visualization_msgs::msg::Marker::SPHERE;
-                if(matrix[row][matrix[0].size() - 1] != matrix[row - 1][matrix[0].size() - 1]) {
+                if (matrix[row][matrix[0].size() - 1] != matrix[row - 1][matrix[0].size() - 1]) {
                     marker.scale.x = 0.15;
                     marker.scale.y = 0.15;
                     marker.scale.z = 0.15;

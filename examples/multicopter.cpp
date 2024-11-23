@@ -396,7 +396,7 @@ bool collisionChecker(std::vector<ompl::base::State *> *propStepStates, std::fun
 
     DetailedCollisionResult trueCollisionResult;
     trueCollisionResult.collisionType == NoCollision;
-    bool collision = true;
+    bool run = true;
 
     if (leftCollisionResult.collisionType == Collision)
         trueCollisionResult = leftCollisionResult;
@@ -405,7 +405,14 @@ bool collisionChecker(std::vector<ompl::base::State *> *propStepStates, std::fun
     else if (bottomCollisionResult.collisionType == Collision)
         trueCollisionResult = bottomCollisionResult;
     else
-        collision = false;
+    {
+        trueCollisionResult.collisionType == NoCollision;
+        run = false;
+    }
+
+    bool collision = run && trueCollisionResult.collisionType == Collision;
+
+    std::vector<double> collision_point;
 
     if (collision)
     {
@@ -422,7 +429,7 @@ bool collisionChecker(std::vector<ompl::base::State *> *propStepStates, std::fun
         new_state->as<ompl::base::RealVectorStateSpace::StateType>()->values[3] = vel_collision_point[1];
         new_state->as<ompl::base::RealVectorStateSpace::StateType>()->values[tFIndex] = trueCollisionResult.collisionTime;
     }
-    return collision;
+    return collision && run;
 }
 
 /** \brief Cost function of minimal hybrid time. */
@@ -478,7 +485,7 @@ int main()
     start->as<ompl::base::RealVectorStateSpace::StateType>()->values[0] = 1;
     start->as<ompl::base::RealVectorStateSpace::StateType>()->values[1] = 2;
     start->as<ompl::base::RealVectorStateSpace::StateType>()->values[2] = 0;
-    start->as<ompl::base::RealVectorStateSpace::StateType>()->values[3] = 0;
+    start->as<ompl::base::RealVectorStateSpace::StateType>()->values[3] = -1;
     start->as<ompl::base::RealVectorStateSpace::StateType>()->values[4] = 0;
     start->as<ompl::base::RealVectorStateSpace::StateType>()->values[5] = 0;
     start->as<ompl::base::RealVectorStateSpace::StateType>()->values[6] = 0;
