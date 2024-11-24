@@ -190,9 +190,8 @@ DetailedCollisionResult polyCollisionChecker(double ts, double tf, std::shared_p
 }
 
 // Fit the points to a fifth degree polynomial in order to use the UC Berkeley collision checker
-Trajectory polyFit3D(std::vector<std::vector<double>> states)
+Trajectory polyFit3D(std::vector<std::vector<double>> states, std::vector<double> tValues)
 { // state is a matrix of however many rows, but four columns (x, y, z, tF)
-    std::vector<double> tValues;
     Eigen::VectorXd yValues(states.size());
     Eigen::VectorXd xValues(states.size());
     Eigen::VectorXd xCoeffs(5);
@@ -203,7 +202,6 @@ Trajectory polyFit3D(std::vector<std::vector<double>> states)
     {
         xValues[rows] = states[rows][0];
         yValues[rows] = states[rows][1];
-        tValues.push_back(states[rows][8]);
     }
 
     xCoeffs = polyfit_Eigen(tValues, xValues, 5);
@@ -214,6 +212,7 @@ Trajectory polyFit3D(std::vector<std::vector<double>> states)
     for (int i = 5; i >= 0; i--)
         coeffs.push_back(Vec3(xCoeffs.coeffRef(i), yCoeffs.coeffRef(i), zCoeffs.coeffRef(i))); // Empty z coefficients
 
+    std::cout << "front t: " << tValues.front() << " back t: " << tValues.back() << std::endl;
     Trajectory traj(coeffs, tValues.front(), tValues.back());
     return traj;
 }
@@ -272,10 +271,10 @@ bool Xu(double x1, double x2)
 }
 
 /** \brief Jump set is true whenever the multicopter is within the area of the c-shaped obstacle. */
-bool jumpSet(ompl::base::State *state)
+bool jumpSet(ompl::geometric::HySST::Motion *motion)
 {
-    double x1 = state->as<ompl::base::RealVectorStateSpace::StateType>()->values[0];
-    double x2 = state->as<ompl::base::RealVectorStateSpace::StateType>()->values[1];
+    double x1 = motion->state->as<ompl::base::RealVectorStateSpace::StateType>()->values[0];
+    double x2 = motion->state->as<ompl::base::RealVectorStateSpace::StateType>()->values[1];
     bool value = false;
 
     // Jump state
@@ -286,15 +285,15 @@ bool jumpSet(ompl::base::State *state)
 }
 
 /** \brief Flow set is true whenever the multicopter is outside of the area of the c-shaped obstacle. */
-bool flowSet(ompl::base::State *state)
+bool flowSet(ompl::geometric::HySST::Motion *motion)
 {
-    return !jumpSet(state);
+    return !jumpSet(motion);
 }
 
 /** \brief Unsafe set is true whenever the multicopter is outside of the 6x7 rectangular planning space. */
-bool unsafeSet(ompl::base::State *state)
+bool unsafeSet(ompl::geometric::HySST::Motion *motion)
 {
-    std::vector<double> x_cur = {state->as<ompl::base::RealVectorStateSpace::StateType>()->values[0], state->as<ompl::base::RealVectorStateSpace::StateType>()->values[1], state->as<ompl::base::RealVectorStateSpace::StateType>()->values[2], state->as<ompl::base::RealVectorStateSpace::StateType>()->values[3]};
+    std::vector<double> x_cur = {motion->state->as<ompl::base::RealVectorStateSpace::StateType>()->values[0], motion->state->as<ompl::base::RealVectorStateSpace::StateType>()->values[1], motion->state->as<ompl::base::RealVectorStateSpace::StateType>()->values[2], motion->state->as<ompl::base::RealVectorStateSpace::StateType>()->values[3]};
     if (x_cur[0] < 0.5 || x_cur[0] > 6 || x_cur[1] < 0 || x_cur[1] > 7 || Xu(x_cur[0], x_cur[1]))
         return true;
     return false;
@@ -309,12 +308,10 @@ ompl::base::State *continuousSimulator(std::vector<double> inputs, ompl::base::S
     double x4 = x_cur->as<ompl::base::RealVectorStateSpace::StateType>()->values[3];
     double x5 = x_cur->as<ompl::base::RealVectorStateSpace::StateType>()->values[4];
     double x6 = x_cur->as<ompl::base::RealVectorStateSpace::StateType>()->values[5];
-    double x7 = x_cur->as<ompl::base::RealVectorStateSpace::StateType>()->values[6];
-    double x8 = x_cur->as<ompl::base::RealVectorStateSpace::StateType>()->values[7];
 
     x1 = x1 + x3 * tFlow + x5 * pow(tFlow, 2) / 2; // x = v0 * t + 1/2(at^2)
     x2 = x2 + x4 * tFlow + x6 * pow(tFlow, 2) / 2; // x = v0 * t + 1/2(at^2)
-    x3 = x3 + (x5)*tFlow;                          // v = v0 + at
+    x3 = x3 + (x5)*tFlow; // v = v0 + at
     x4 = x4 + (x6)*tFlow;
     x5 += inputs[0];
     x6 += inputs[1]; // Set control input to 0 for flow
@@ -325,10 +322,6 @@ ompl::base::State *continuousSimulator(std::vector<double> inputs, ompl::base::S
     new_state->as<ompl::base::RealVectorStateSpace::StateType>()->values[3] = x4;
     new_state->as<ompl::base::RealVectorStateSpace::StateType>()->values[4] = x5;
     new_state->as<ompl::base::RealVectorStateSpace::StateType>()->values[5] = x6;
-    new_state->as<ompl::base::RealVectorStateSpace::StateType>()->values[6] = inputs[0];
-    new_state->as<ompl::base::RealVectorStateSpace::StateType>()->values[7] = inputs[1];                                                           // No change in jump time
-    new_state->as<ompl::base::RealVectorStateSpace::StateType>()->values[8] = x_cur->as<ompl::base::RealVectorStateSpace::StateType>()->values[8]; // Append control input to state
-    new_state->as<ompl::base::RealVectorStateSpace::StateType>()->values[9] = x_cur->as<ompl::base::RealVectorStateSpace::StateType>()->values[9]; // Append control input to state
     return new_state;
 }
 
@@ -369,26 +362,35 @@ ompl::base::State *discreteSimulator(ompl::base::State *x_cur, std::vector<doubl
     new_state->as<ompl::base::RealVectorStateSpace::StateType>()->values[3] = x4;
     new_state->as<ompl::base::RealVectorStateSpace::StateType>()->values[4] = 0;
     new_state->as<ompl::base::RealVectorStateSpace::StateType>()->values[5] = 0;
-    new_state->as<ompl::base::RealVectorStateSpace::StateType>()->values[6] = 0;                                                                   // No control input
-    new_state->as<ompl::base::RealVectorStateSpace::StateType>()->values[7] = 0;                                                                   // No control input
-    new_state->as<ompl::base::RealVectorStateSpace::StateType>()->values[8] = x_cur->as<ompl::base::RealVectorStateSpace::StateType>()->values[8]; // No change in flow time
-    new_state->as<ompl::base::RealVectorStateSpace::StateType>()->values[9] = x_cur->as<ompl::base::RealVectorStateSpace::StateType>()->values[9]; // No change in jump time
     return new_state;
 }
 
 /** \brief Collision checker for the multicopter, courtesy of Berkeley Hybrid Systems Lab. */
-bool collisionChecker(std::vector<ompl::base::State *> *propStepStates, std::function<bool(ompl::base::State *state)> obstacleSet, double ts, double tf, ompl::base::State *new_state, int tFIndex)
+bool collisionChecker(ompl::geometric::HySST::Motion *motion, std::function<bool(ompl::geometric::HySST::Motion *motion)> obstacleSet, double ts, double tf, ompl::base::State *new_state, double *collisionTime)
 {
     std::vector<std::vector<double>> *propStepStatesDouble = new std::vector<std::vector<double>>();
-    for (int i = 0; i < propStepStates->size(); i++)
+    for (int i = 0; i < motion->solutionPair->size(); i++)
     {
         std::vector<double> row;
-        for (int j = 0; j < 10; j++)
-            row.push_back(propStepStates->at(i)->as<ompl::base::RealVectorStateSpace::StateType>()->values[j]);
+        for (int j = 0; j < 6; j++)
+            row.push_back(motion->solutionPair->at(i)->as<ompl::base::RealVectorStateSpace::StateType>()->values[j]);
         propStepStatesDouble->push_back(row);
     }
 
-    Trajectory _traj = polyFit3D(*propStepStatesDouble);
+    std::vector<double> tValues;
+    for (int i = 0; i < motion->hybridTime->size(); i++)
+    {
+        tValues.push_back(motion->hybridTime->at(i).first);
+    }
+
+    if(tValues.front() == tValues.back()) 
+        return false;
+
+    ts = tValues.front();
+    tf = tValues.back();
+
+
+    Trajectory _traj = polyFit3D(*propStepStatesDouble, tValues);
 
     DetailedCollisionResult leftCollisionResult = polyCollisionChecker(ts, tf, leftRectPrism, 1e-03, 0, _traj);
     DetailedCollisionResult topCollisionResult = polyCollisionChecker(ts, tf, topRectPrism, 1e-03, 0, _traj);
@@ -411,7 +413,6 @@ bool collisionChecker(std::vector<ompl::base::State *> *propStepStates, std::fun
     }
 
     bool collision = run && trueCollisionResult.collisionType == Collision;
-
     std::vector<double> collision_point;
 
     if (collision)
@@ -427,33 +428,10 @@ bool collisionChecker(std::vector<ompl::base::State *> *propStepStates, std::fun
         new_state->as<ompl::base::RealVectorStateSpace::StateType>()->values[1] = collision_point[1];
         new_state->as<ompl::base::RealVectorStateSpace::StateType>()->values[2] = vel_collision_point[0];
         new_state->as<ompl::base::RealVectorStateSpace::StateType>()->values[3] = vel_collision_point[1];
-        new_state->as<ompl::base::RealVectorStateSpace::StateType>()->values[tFIndex] = trueCollisionResult.collisionTime;
+        collisionTime = &trueCollisionResult.collisionTime;
     }
     return collision && run;
 }
-
-/** \brief Cost function of minimal hybrid time. */
-class TimeObjective : public ompl::base::StateCostIntegralObjective
-{
-public:
-    TimeObjective(const ompl::base::SpaceInformationPtr &si, double cost) : ompl::base::StateCostIntegralObjective(si)
-    {
-        setCostThreshold(ompl::base::Cost(cost));
-    }
-
-    ompl::base::Cost stateCost(const ompl::base::State *state) const
-    {
-        return ompl::base::Cost(state->as<ompl::base::RealVectorStateSpace::StateType>()->values[8] + state->as<ompl::base::RealVectorStateSpace::StateType>()->values[9]);
-    }
-
-    ompl::base::Cost motionCost(const ompl::base::State *state1, const ompl::base::State *state2) const
-    {
-        return ompl::base::Cost(state2->as<ompl::base::RealVectorStateSpace::StateType>()->values[8] + state2->as<ompl::base::RealVectorStateSpace::StateType>()->values[9]
-                     - state1->as<ompl::base::RealVectorStateSpace::StateType>()->values[8] - state1->as<ompl::base::RealVectorStateSpace::StateType>()->values[9]);
-    }
-
-    // bool isSatisfied(Cost c) { return true; }
-};
 
 int main()
 {
@@ -468,10 +446,6 @@ int main()
     statespace->addDimension(-3, 100000);
     statespace->addDimension(-3, 3);
     statespace->addDimension(-3, 3);
-    statespace->addDimension(0, std::numeric_limits<double>::epsilon());
-    statespace->addDimension(0, std::numeric_limits<double>::epsilon());
-    statespace->addDimension(0, std::numeric_limits<double>::epsilon());
-    statespace->addDimension(0, std::numeric_limits<double>::epsilon());
 
     ompl::base::StateSpacePtr space(statespace);
 
@@ -488,10 +462,6 @@ int main()
     start->as<ompl::base::RealVectorStateSpace::StateType>()->values[3] = 0;
     start->as<ompl::base::RealVectorStateSpace::StateType>()->values[4] = 0;
     start->as<ompl::base::RealVectorStateSpace::StateType>()->values[5] = 0;
-    start->as<ompl::base::RealVectorStateSpace::StateType>()->values[6] = 0;
-    start->as<ompl::base::RealVectorStateSpace::StateType>()->values[7] = 0;
-    start->as<ompl::base::RealVectorStateSpace::StateType>()->values[8] = 0;
-    start->as<ompl::base::RealVectorStateSpace::StateType>()->values[9] = 0;
 
     // Set goal state to be (5, 4)
     ompl::base::ScopedState<> goal(space);
@@ -503,7 +473,6 @@ int main()
 
     // Set the start and goal states
     pdef->setStartAndGoalStates(start, goal);
-    pdef->setOptimizationObjective(ompl::base::OptimizationObjectivePtr(new TimeObjective(si, 100)));
 
     ompl::geometric::HySST cHySST(si);
 
@@ -526,7 +495,7 @@ int main()
 
     // attempt to solve the planning problem within 10 seconds
     ompl::base::PlannerStatus solved = cHySST.solve(ompl::base::timedPlannerTerminationCondition(10000000));
-    // std::cout << "solution status: " << solved << std::endl;
+    std::cout << "solution status: " << solved << std::endl;
 
     // print path to RViz2 data file
     std::ofstream outFile("../../examples/visualize/src/points.txt");

@@ -67,6 +67,55 @@ namespace ompl
 
             void setup() override;
 
+            /** \brief Representation of a motion
+
+                This only contains pointers to parent motions as we
+                only need to go backwards in the tree. */
+            class Motion
+            {
+            public:
+                Motion() = default;
+
+                /** \brief Constructor that allocates memory for the state and the control */
+                Motion(const base::SpaceInformationPtr &si)
+                  : state(si->allocState())
+                {
+                }
+
+                virtual ~Motion() = default;
+
+                virtual base::State *getState() const
+                {
+                    return state;
+                }
+                virtual Motion *getParent() const
+                {
+                    return parent;
+                }
+                base::Cost accCost_{0.};
+
+                /** \brief The state contained by the motion */
+                base::State *state{nullptr};
+
+                /** \brief The parent motion in the exploration tree */
+                Motion *parent{nullptr};
+
+                /** \brief Number of children */
+                unsigned numChildren_{0};
+
+                /** \brief If inactive, this node is not considered for selection.*/
+                bool inactive_{false};
+
+                /// \brief The integration steps defining the edge of the motion, between the parent and child vertices
+                std::vector<base::State *> *solutionPair{nullptr};
+
+                /// \brief The inputs associated with the solution pair
+                std::vector<ompl::control::Control *> *inputs = new std::vector<ompl::control::Control *>();
+
+                /// \brief The hybrid time parameterizing each state in the solution pair
+                std::vector<std::pair<double, int>> *hybridTime = new std::vector<std::pair<double, int>>();
+            };
+
             /** \brief Continue solving for some amount of time. Return true if solution was found. */
             base::PlannerStatus solve(const base::PlannerTerminationCondition &ptc) override;
 
@@ -219,19 +268,19 @@ namespace ompl
             }
 
             /** \brief Set the jump set. */
-            void setJumpSet(std::function<bool(base::State *)> jumpSet)
+            void setJumpSet(std::function<bool(Motion *)> jumpSet)
             {
                 jumpSet_ = jumpSet;
             }
 
             /** \brief Set the flow set. */
-            void setFlowSet(std::function<bool(base::State *)> flowSet)
+            void setFlowSet(std::function<bool(Motion *)> flowSet)
             {
                 flowSet_ = flowSet;
             }
 
             /** \brief Set the unsafe set. */
-            void setUnsafeSet(std::function<bool(base::State *)> unsafeSet)
+            void setUnsafeSet(std::function<bool(Motion *)> unsafeSet)
             {
                 unsafeSet_ = unsafeSet;
             }
@@ -256,8 +305,8 @@ namespace ompl
             }
 
             /** \brief Set the collision checker. */
-            void setCollisionChecker(std::function<bool(std::vector<base::State *> *edge, std::function<bool(base::State *state)> obstacleSet, 
-                                     double ts, double tf, base::State *newState, int tFIndex)> function)
+            void setCollisionChecker(std::function<bool(Motion *motion, std::function<bool(Motion *motion)> obstacleSet, 
+                                     double ts, double tf, base::State *newState, double *collisionTime)> function)
             {
                 collisionChecker_ = function;
             }
@@ -366,55 +415,6 @@ namespace ompl
             }
 
         protected:
-            /** \brief Representation of a motion
-
-                This only contains pointers to parent motions as we
-                only need to go backwards in the tree. */
-            class Motion
-            {
-            public:
-                Motion() = default;
-
-                /** \brief Constructor that allocates memory for the state and the control */
-                Motion(const base::SpaceInformationPtr &si)
-                  : state(si->allocState())
-                {
-                }
-
-                virtual ~Motion() = default;
-
-                virtual base::State *getState() const
-                {
-                    return state;
-                }
-                virtual Motion *getParent() const
-                {
-                    return parent;
-                }
-                base::Cost accCost_{0.};
-
-                /** \brief The state contained by the motion */
-                base::State *state{nullptr};
-
-                /** \brief The parent motion in the exploration tree */
-                Motion *parent{nullptr};
-
-                /** \brief Number of children */
-                unsigned numChildren_{0};
-
-                /** \brief If inactive, this node is not considered for selection.*/
-                bool inactive_{false};
-
-                /// \brief The integration steps defining the edge of the motion, between the parent and child vertices
-                std::vector<base::State *> *solutionPair{nullptr};
-
-                /// \brief The inputs associated with the solution pair
-                std::vector<ompl::control::Control *> *inputs = new std::vector<ompl::control::Control *>();
-
-                /// \brief The hybrid time parameterizing each state in the solution pair
-                std::vector<std::pair<double, int>> *hybridTime = new std::vector<std::pair<double, int>>();
-            };
-
             class Witness : public Motion
             {
             public:
@@ -467,25 +467,16 @@ namespace ompl
 
             /** \brief Collision checker. Optional is point-by-point collision checking
              * using the jump set. */
-            std::function<bool(std::vector<base::State *> *edge,
-                               std::function<bool(base::State *state)> obstacleSet,
-                               double ts, double tf, base::State *newState, int tFIndex)>
+            std::function<bool(Motion *motion,
+                               std::function<bool(Motion *motion)> obstacleSet,
+                               double ts, double tf, base::State *newState, double *collisionTime)>
                 collisionChecker_ =
-                    [this](std::vector<base::State *> *edge,
-                           std::function<bool(base::State *state)> obstacleSet, double t = -1.0,
-                           double tf = -1.0, base::State *newState, int tFIndex = -1) -> bool
+                    [this](Motion *motion,
+                           std::function<bool(Motion *motion)> obstacleSet, double t = -1.0,
+                           double tf = -1.0, base::State *newState, double *collisionTime) -> bool
             {
-                for (unsigned int i = 0; i < edge->size(); i++)
-                {
-                    if (obstacleSet(edge->at(i)))
-                    {
-                        if (i == 0)
-                            si_->copyState(newState, edge->at(i));
-                        else
-                            si_->copyState(newState, edge->at(i - 1));
-                        return true;
-                    }
-                }
+                if (obstacleSet(motion))
+                    return true;
                 return false;
             };
 
@@ -548,15 +539,15 @@ namespace ompl
 
             /** \brief Function that returns true if a state is in the jump set, and false
              * if not. */
-            std::function<bool(base::State *state)> jumpSet_;
+            std::function<bool(Motion *motion)> jumpSet_;
 
             /** \brief Function that returns true if a state is in the flow set, and false
              * if not. */
-            std::function<bool(base::State *state)> flowSet_;
+            std::function<bool(Motion *motion)> flowSet_;
 
             /** \brief Function that returns true if a state is in the flow set, and false
              * if not. */
-            std::function<bool(base::State *state)> unsafeSet_;
+            std::function<bool(Motion *motion)> unsafeSet_;
 
             /** \brief Simulator for propgation under flow regime */
             std::function<base::State *(std::vector<double> input, base::State *curState, double tFlowMax, base::State *newState)> continuousSimulator_;

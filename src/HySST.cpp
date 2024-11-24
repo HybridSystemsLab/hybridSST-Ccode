@@ -44,6 +44,7 @@
 #include "ompl/base/spaces/RealVectorStateSpace.h"
 #include <limits>
 #include "ompl/base/goals/GoalState.h"
+#include "ompl/control/spaces/RealVectorControlSpace.h"
 
 ompl::geometric::HySST::HySST(const base::SpaceInformationPtr &si) : base::Planner(si, "HySST")
 {
@@ -196,12 +197,17 @@ ompl::geometric::HySST::Witness *ompl::geometric::HySST::findClosestWitness(ompl
 
 std::vector<ompl::geometric::HySST::Motion *> ompl::geometric::HySST::extend(Motion *parentMotion, base::Goal *goalState)
 {
+    // Initialize control inputs
+    control::RealVectorControlSpace *controlSpace_ = new control::RealVectorControlSpace(si_->getStateSpace(), minJumpInputValue_.size() > minFlowInputValue_.size() ? minJumpInputValue_.size() : minFlowInputValue_.size());
+    int numInputs = minFlowInputValue_.size() > minJumpInputValue_.size() ? minFlowInputValue_.size() : minJumpInputValue_.size();
+
+    // Initialize hybrid times for solution pair
+    std::pair<double, int> hybridTimeInitial = parentMotion->hybridTime->back();
+    std::vector<std::pair<double, int>> *hybridTimes = new std::vector<std::pair<double, int>>();
+
     // Vectors for storing flow and jump inputs
     std::vector<double> flowInputs;
     std::vector<double> jumpInputs;
-
-    const unsigned int TF_INDEX = si_->getStateDimension() - 2; // Second to last column
-    const unsigned int TJ_INDEX = si_->getStateDimension() - 1; // Last column
 
     // Generate random maximum flow time
     double random = rand();
@@ -211,8 +217,8 @@ std::vector<ompl::geometric::HySST::Motion *> ompl::geometric::HySST::extend(Mot
     bool collision = false; // Set collision to false initially
 
     // Choose whether to begin growing the tree in the flow or jump regime
-    bool in_jump = jumpSet_(parentMotion->state);
-    bool in_flow = flowSet_(parentMotion->state);
+    bool in_jump = jumpSet_(parentMotion);
+    bool in_flow = flowSet_(parentMotion);
     bool priority = in_jump && in_flow ? random / RAND_MAX > 0.5 : in_jump; // If both are true, equal chance of being in flow or jump set.
 
     // Sample and instantiate parent vertices and states in edges
@@ -226,35 +232,51 @@ std::vector<ompl::geometric::HySST::Motion *> ompl::geometric::HySST::extend(Mot
     // Fill the edge with the starting vertex
     base::State *parentState = si_->allocState();
     si_->copyState(parentState, previousState);
-    intermediateStates->push_back(parentState);
 
     // Simulate in either the jump or flow regime
     if (!priority)
     { // Flow
         // Randomly sample the flow inputs
         flowInputs = sampleFlowInputs_();
+        control::Control *flowInput = controlSpace_->allocControl();
+        for(int i = 0; i < flowInputs.size(); i++)
+            flowInput->as<control::RealVectorControlSpace::ControlType>()->values[i] = flowInputs[i];
 
-        while (tFlow < randomFlowTimeMax && flowSet_(parentMotion->state))
+        while (tFlow < randomFlowTimeMax && flowSet_(parentMotion))
         {
             tFlow += flowStepDuration_;
+            hybridTimes->push_back(std::pair<double, int>(tFlow + hybridTimeInitial.first, hybridTimeInitial.second));
 
             // Find new state with continuous simulation
             base::State *intermediateState = si_->allocState();
             intermediateState = this->continuousSimulator_(flowInputs, previousState, flowStepDuration_, intermediateState);
-            intermediateState->as<base::RealVectorStateSpace::StateType>()->values[TF_INDEX] += flowStepDuration_;
-
-            // Return nullptr if in unsafe set and exit function
-            if (unsafeSet_(intermediateState))
-                return std::vector<Motion *>(); // Return empty vector
 
             // Add new intermediate state to edge
             intermediateStates->push_back(intermediateState);
 
             // Collision Checking
-            double ts = parentMotion->state->as<base::RealVectorStateSpace::StateType>()->values[TF_INDEX];
-            double tf = intermediateState->as<base::RealVectorStateSpace::StateType>()->values[TF_INDEX];
+            double ts = hybridTimeInitial.first;
+            double tf = hybridTimeInitial.first + tFlow;
 
-            collision = collisionChecker_(intermediateStates, jumpSet_, ts, tf, intermediateState, TF_INDEX);
+            // Create motion to add to tree
+            auto *motion = new Motion(si_);
+            si_->copyState(motion->state, intermediateState);
+            motion->parent = parentMotion;
+            motion->solutionPair = intermediateStates; // Set the new motion solutionPair
+            motion->hybridTime = hybridTimes;
+            for (int i = 0; i < intermediateStates->size(); i++)
+                motion->inputs->push_back(flowInput);
+
+            // Return nullptr if in unsafe set and exit function
+            if (unsafeSet_(motion))
+                return std::vector<Motion *>(); // Return empty vector
+
+            double *collisionTime = new double(-1.0);
+            collision = collisionChecker_(motion, jumpSet_, ts, tf, intermediateState, collisionTime);
+
+            if (*collisionTime != -1.0)   
+                hybridTimes->back().first = *collisionTime;
+                
             // State has passed all tests so update parent, edge, and temporary states
             si_->copyState(previousState, intermediateState);
 
@@ -265,11 +287,7 @@ std::vector<ompl::geometric::HySST::Motion *> ompl::geometric::HySST::extend(Mot
             // If maximum flow time has been reached, a collision has occured, or a solution has been found, exit the loop
             if (tFlow >= randomFlowTimeMax || collision || inGoalSet)
             {
-                // Create motion to add to tree
-                auto *motion = new Motion(si_);
-                si_->copyState(motion->state, intermediateState);
-                motion->parent = parentMotion;
-                motion->solutionPair = intermediateStates; // Set the new motion edge
+                hybridTimeInitial.first = hybridTimes->back().first;
 
                 if (inGoalSet)
                 {
@@ -292,20 +310,26 @@ std::vector<ompl::geometric::HySST::Motion *> ompl::geometric::HySST::extend(Mot
         // Randomly sample the jump inputs
         jumpInputs = sampleJumpInputs_();
 
+        control::Control *jumpInput = controlSpace_->allocControl();
+        for(int i = 0; i < jumpInputs.size(); i++) {
+            jumpInput->as<control::RealVectorControlSpace::ControlType>()->values[i] = jumpInputs[i];
+        }
+
         // Instantiate and find new state with discrete simulator
         base::State *newState = si_->allocState();
 
-        newState = this->discreteSimulator_(intermediateStates->back(), jumpInputs, newState); // changed from previousState to newMotion->state
-        newState->as<base::RealVectorStateSpace::StateType>()->values[TJ_INDEX]++;
-
-        // Return nullptr if in unsafe set and exit function
-        if (unsafeSet_(newState))
-            return std::vector<Motion *>(); // Return empty vector
+        newState = this->discreteSimulator_(previousState, jumpInputs, newState);
 
         // Create motion to add to tree
         auto *motion = new Motion(si_);
         si_->copyState(motion->state, newState);
         motion->parent = collisionParentMotion;
+        motion->inputs->push_back(jumpInput);
+        motion->hybridTime->push_back(std::pair<double, int>(hybridTimeInitial.first, hybridTimeInitial.second + 1));
+
+        // Return nullptr if in unsafe set and exit function
+        if (unsafeSet_(motion))
+            return std::vector<Motion *>(); // Return empty vector
 
         // Add motions to tree, and free up memory allocated to newState
         collisionParentMotion->numChildren_++;
@@ -345,6 +369,7 @@ ompl::base::PlannerStatus ompl::geometric::HySST::solve(const base::PlannerTermi
         auto *motion = new Motion(si_);
         si_->copyState(motion->state, st);
         nn_->add(motion);
+        motion->hybridTime->push_back(std::pair<double, int>(0.0, 0));
         motion->accCost_ = opt_->identityCost(); // Initialize the accumulated cost to the identity cost
         findClosestWitness(motion);              // Set representatives for the witness set
     }
@@ -370,6 +395,7 @@ ompl::base::PlannerStatus ompl::geometric::HySST::solve(const base::PlannerTermi
     while (!ptc)
     {
         checkMandatoryParametersSet();
+            // Define control space
 
         /* sample random state */
         randomSample(rmotion);
@@ -426,10 +452,7 @@ ompl::base::PlannerStatus ompl::geometric::HySST::solve(const base::PlannerTermi
                     prevSolution_.push_back(solTrav);
                     solTrav = solTrav->parent;
                 }
-                prevSolutionCost_ = solution->accCost_;
-
-                OMPL_WARN("Found solution with cost %.2f, a distance %.2f away from goal", solution->accCost_.value(), dist_);
-                
+                prevSolutionCost_ = solution->accCost_;                
                 solutions++;
                 if(solutions >= batchSize)
                     break;
@@ -487,23 +510,115 @@ ompl::base::PlannerStatus ompl::geometric::HySST::solve(const base::PlannerTermi
     if (solution != nullptr)    // If any state has been successfully propagated
     {
         /* set the solution path */
-        auto path(std::make_shared<PathGeometric>(si_));
-        for (int i = prevSolution_.size() - 1; i >= 0; --i)
-        {
-            if (prevSolution_[i]->solutionPair != nullptr)
-            { // A jump motion does not contain an solutionPair
-                for (auto state : *(prevSolution_[i]->solutionPair))
-                    path->append(state);
-            }
-            else if (i == 0) {  // If a the last element is a jump motion, add it's parent, since it will not be added as part of the solution pair
-                path->append(prevSolution_[i]->parent->state);
-                path->append(prevSolution_[i]->state);
-            }
-        }
-        pdef_->addSolutionPath(path, approximate, approxdif, getName());
+        constructSolution(solution);
     }
 
     return {solved, approximate};
+}
+
+ompl::base::PlannerStatus ompl::geometric::HySST::constructSolution(Motion *last_motion)
+{
+    std::vector<Motion *> trajectory;
+    nn_->list(trajectory);
+    std::vector<Motion *> mpath;
+
+    double finalDistance = distanceFunc_(trajectory.back()->state, pdef_->getGoal()->as<base::GoalState>()->getState());
+    Motion *solution = last_motion;
+
+    int pathSize = 0;
+
+    // Construct the path from the goal to the start by following the parent pointers
+    while (solution != nullptr)
+    {
+        mpath.push_back(solution);
+        if (solution->solutionPair != nullptr)              // A jump motion does not contain an solutionPair
+            pathSize += solution->solutionPair->size();
+        solution = solution->parent;
+    }
+
+    // Associate inputs and hybrid time with states of each solution pair
+    int numInputs = minFlowInputValue_.size() > minJumpInputValue_.size() ? minFlowInputValue_.size() : minJumpInputValue_.size();
+    ompl::base::RealVectorStateSpace *associateStateSpace = new ompl::base::RealVectorStateSpace(0);
+    for (int i = 0; i < si_->getStateSpace()->getDimension() + numInputs + 2; i++) {
+        associateStateSpace->addDimension(0, 1);    // Arbitrary values for initialization
+    }
+
+    ompl::base::StateSpacePtr space(associateStateSpace);
+
+    // Construct a space information instance for this state space
+    ompl::base::SpaceInformationPtr associatedSi(new ompl::base::SpaceInformation(space));
+
+    associatedSi->setup();
+
+    ompl::base::ProblemDefinitionPtr pdef(new ompl::base::ProblemDefinition(associatedSi));
+
+    // Create a new path object to store the solution path
+    auto path(std::make_shared<PathGeometric>(associatedSi));
+
+    // Add the states to the path in reverse order (from start to goal)
+    for (int i = mpath.size() - 1; i >= 0; --i)
+    {
+        // Append all intermediate states to the path, including starting state,
+        // excluding end vertex
+        if (mpath[i]->solutionPair != nullptr)
+        { // A jump motion does not contain an solutionPair
+            for(int k = 0; k < mpath[i]->solutionPair->size(); k++)
+            {
+                base::State *associatedState = associatedSi->allocState();
+
+                // Add in state values
+                if(k == mpath[i]->solutionPair->size() - 1) {
+                    associatedState = mpath[i]->state;
+                }
+                else {                
+                    for (int j = 0; j < si_->getStateSpace()->getDimension(); j++) {
+                        associatedState->as<base::RealVectorStateSpace::StateType>()->values[j] = mpath[i]->solutionPair->at(k)->as<base::RealVectorStateSpace::StateType>()->values[j];
+                    }
+                }
+
+                // Add in input values
+                for (int j = 0; j < numInputs; j++) {
+                    associatedState->as<base::RealVectorStateSpace::StateType>()->values[si_->getStateSpace()->getDimension() + j] = mpath[i]->inputs->at(k)->as<control::RealVectorControlSpace::ControlType>()->values[j];
+                }
+                
+                // Add in hybrid time
+                associatedState->as<base::RealVectorStateSpace::StateType>()->values[si_->getStateSpace()->getDimension() + numInputs] = mpath[i]->hybridTime->at(k).first;
+                associatedState->as<base::RealVectorStateSpace::StateType>()->values[si_->getStateSpace()->getDimension() + numInputs + 1] = mpath[i]->hybridTime->at(k).second;
+
+                path->append(associatedState);
+            }
+        }
+        else {  // If a normal jump motion
+                base::State *associatedState = associatedSi->allocState();
+
+                // Add in state values
+                for (int j = 0; j < si_->getStateSpace()->getDimension(); j++) {
+                    associatedState->as<base::RealVectorStateSpace::StateType>()->values[j] = mpath[i]->state->as<base::RealVectorStateSpace::StateType>()->values[j];
+                }
+
+                // If not starting state
+                if (i != mpath.size() - 1) {
+                    // Add in input values
+                    for (int j = 0; j < numInputs; j++) {
+                        associatedState->as<base::RealVectorStateSpace::StateType>()->values[si_->getStateSpace()->getDimension() + j] = mpath[i]->inputs->at(0)->as<control::RealVectorControlSpace::ControlType>()->values[j];
+                    }
+                }
+                
+                // Add in hybrid time
+                associatedState->as<base::RealVectorStateSpace::StateType>()->values[si_->getStateSpace()->getDimension() + numInputs] = mpath[i]->hybridTime->back().first;
+                associatedState->as<base::RealVectorStateSpace::StateType>()->values[si_->getStateSpace()->getDimension() + numInputs + 1] = mpath[i]->hybridTime->back().second;
+
+                path->append(associatedState);
+        }
+    }
+
+    pdef_->addSolutionPath(path, finalDistance > 0.0, finalDistance, getName());
+
+    // Return a status indicating that an exact solution has been found
+    if (finalDistance > 0.0)
+        return base::PlannerStatus::APPROXIMATE_SOLUTION;
+    else
+        return base::PlannerStatus::EXACT_SOLUTION;
 }
 
 void ompl::geometric::HySST::getPlannerData(base::PlannerData &data) const

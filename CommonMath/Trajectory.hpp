@@ -20,6 +20,7 @@
 #pragma once
 #include <vector>
 #include "Vec3.hpp"
+#include <iostream>
 
 namespace CommonMath {
 
@@ -86,6 +87,7 @@ class Trajectory {
    * @return Position of trajectory at time t
    */
   Vec3 GetValue(double t) const {
+    std::cout << "t: " << t << std::endl;
     assert(t >= _startTime);
     assert(t <= _endTime);
     return _coeffs[0] * t * t * t * t * t + _coeffs[1] * t * t * t * t
