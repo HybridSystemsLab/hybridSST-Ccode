@@ -56,10 +56,7 @@ ompl::geometric::HySST::HySST(const base::SpaceInformationPtr &si) : base::Plann
                                { return std::to_string(this->prevSolutionCost_.value()); });
 }
 
-ompl::geometric::HySST::~HySST()
-{
-    freeMemory();
-}
+ompl::geometric::HySST::~HySST() {}
 
 void ompl::geometric::HySST::setup()
 {
