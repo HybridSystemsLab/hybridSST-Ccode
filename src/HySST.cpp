@@ -328,6 +328,7 @@ std::vector<ompl::geometric::HySST::Motion *> ompl::geometric::HySST::extend(Mot
         collisionParentMotion->numChildren_++;
         return std::vector<Motion *>{motion, collisionParentMotion};
     }
+    return std::vector<Motion *>();
 }
 
 void ompl::geometric::HySST::randomSample(Motion *randomMotion)
@@ -387,9 +388,6 @@ ompl::base::PlannerStatus ompl::geometric::HySST::solve(const base::PlannerTermi
 
     while (!ptc)
     {
-        checkMandatoryParametersSet();
-            // Define control space
-
         /* sample random state */
         randomSample(rmotion);
 
@@ -536,10 +534,6 @@ ompl::base::PlannerStatus ompl::geometric::HySST::constructSolution(Motion *last
     // Construct a space information instance for this state space
     ompl::base::SpaceInformationPtr associatedSi(new ompl::base::SpaceInformation(space));
 
-    associatedSi->setup();
-
-    ompl::base::ProblemDefinitionPtr pdef(new ompl::base::ProblemDefinition(associatedSi));
-
     // Create a new path object to store the solution path
     auto path(std::make_shared<PathGeometric>(associatedSi));
 
@@ -555,19 +549,16 @@ ompl::base::PlannerStatus ompl::geometric::HySST::constructSolution(Motion *last
                 base::State *associatedState = associatedSi->allocState();
 
                 // Add in state values
-                if(k == mpath[i]->solutionPair->size() - 1) {
+                if(k == mpath[i]->solutionPair->size() - 1)
                     associatedState = mpath[i]->state;
-                }
                 else {                
-                    for (int j = 0; j < si_->getStateSpace()->getDimension(); j++) {
+                    for (int j = 0; j < si_->getStateSpace()->getDimension(); j++)
                         associatedState->as<base::RealVectorStateSpace::StateType>()->values[j] = mpath[i]->solutionPair->at(k)->as<base::RealVectorStateSpace::StateType>()->values[j];
-                    }
                 }
 
                 // Add in input values
-                for (int j = 0; j < numInputs; j++) {
+                for (int j = 0; j < numInputs; j++) 
                     associatedState->as<base::RealVectorStateSpace::StateType>()->values[si_->getStateSpace()->getDimension() + j] = mpath[i]->inputs->at(k)->as<control::RealVectorControlSpace::ControlType>()->values[j];
-                }
                 
                 // Add in hybrid time
                 associatedState->as<base::RealVectorStateSpace::StateType>()->values[si_->getStateSpace()->getDimension() + numInputs] = mpath[i]->hybridTime->at(k).first;
@@ -580,16 +571,14 @@ ompl::base::PlannerStatus ompl::geometric::HySST::constructSolution(Motion *last
                 base::State *associatedState = associatedSi->allocState();
 
                 // Add in state values
-                for (int j = 0; j < si_->getStateSpace()->getDimension(); j++) {
+                for (int j = 0; j < si_->getStateSpace()->getDimension(); j++)
                     associatedState->as<base::RealVectorStateSpace::StateType>()->values[j] = mpath[i]->state->as<base::RealVectorStateSpace::StateType>()->values[j];
-                }
 
                 // If not starting state
                 if (i != mpath.size() - 1) {
                     // Add in input values
-                    for (int j = 0; j < numInputs; j++) {
+                    for (int j = 0; j < numInputs; j++)
                         associatedState->as<base::RealVectorStateSpace::StateType>()->values[si_->getStateSpace()->getDimension() + j] = mpath[i]->inputs->at(0)->as<control::RealVectorControlSpace::ControlType>()->values[j];
-                    }
                 }
                 
                 // Add in hybrid time
