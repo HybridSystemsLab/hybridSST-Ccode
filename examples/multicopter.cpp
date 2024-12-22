@@ -489,7 +489,7 @@ int main()
     cHySST.setFlowInputRange(std::vector<double>{-0.5, -1}, std::vector<double>{1, 1});
     cHySST.setJumpInputRange(std::vector<double>{0, 0}, std::vector<double>{0, 0});
     cHySST.setUnsafeSet(unsafeSet);
-    // cHySST.setCollisionChecker(collisionChecker);
+    cHySST.setCollisionChecker(collisionChecker);
     cHySST.setSelectionRadius(0.03);
     cHySST.setPruningRadius(0.02);
 
@@ -499,5 +499,5 @@ int main()
 
     // print path to RViz2 data file
     std::ofstream outFile("../../examples/visualize/src/points.txt");
-    // pdef->getSolutionPath()->as<ompl::geometric::PathGeometric>()->printAsMatrix(outFile);
+    pdef->getSolutionPath()->as<ompl::geometric::PathGeometric>()->printAsMatrix(outFile);
 }

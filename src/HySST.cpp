@@ -81,25 +81,22 @@ void ompl::geometric::HySST::setup()
                           "functions w.r.t. state and control. This optimization objective will result in undefined "
                           "behavior",
                           getName().c_str());
-            costFunc_ =
-                    [this](Motion *motion) -> base::Cost
+            costFunc_ = [this](Motion *motion) -> base::Cost
             {
                 return opt_->motionCost(motion->parent->state, motion->state);
             };
         }
         else
         {
-            OMPL_WARN("%s: No optimization object set. Using hybrid time", getName().c_str());
-            costFunc_ = [this](Motion *motion) -> base::Cost
-            {
-                return base::Cost(motion->hybridTime->back().first - motion->parent->hybridTime->back().first + motion->hybridTime->back().second - motion->parent->hybridTime->back().second);
-            };
-            opt_ = std::make_shared<base::PathLengthOptimizationObjective>(si_);
+            // if no optimization objective set, assume we want to minimize hybrid time
+            goto HYBRID_TIME;
         }
     }
     else
     {
-        OMPL_WARN("%s: No optimization object set. Using path length", getName().c_str());
+        HYBRID_TIME:
+
+        OMPL_WARN("%s: No optimization object set. Using hybrid time", getName().c_str());
         costFunc_ = [this](Motion *motion) -> base::Cost
         {
             return base::Cost(motion->hybridTime->back().first - motion->parent->hybridTime->back().first + motion->hybridTime->back().second - motion->parent->hybridTime->back().second);
@@ -182,34 +179,27 @@ ompl::geometric::HySST::Motion *ompl::geometric::HySST::selectNode(ompl::geometr
 
 ompl::geometric::HySST::Witness *ompl::geometric::HySST::findClosestWitness(ompl::geometric::HySST::Motion *node)
 {
+    auto *closest = new Witness(si_);
+
     if (witnesses_->size() > 0)
+        closest = static_cast<Witness *>(witnesses_->nearest(node));
+
+    if (distanceFunc_(closest->state, node->state) > pruningRadius_ || witnesses_->size() == 0) // If the closest witness is outside the pruning radius or if there are no witnesses yet, return a new witness at the same point as the node.
     {
-        auto *closest = static_cast<Witness *>(witnesses_->nearest(node));
-        if (distanceFunc_(closest->state, node->state) > pruningRadius_) // If the closest witness is outside the pruning radius, return a new witness at the same point as the node.
-        {
-            closest = new Witness(si_);
-            closest->linkRep(node);
-            si_->copyState(closest->state, node->state);
-            witnesses_->add(closest);
-        }
-        return closest;
-    }
-    else
-    {
-        auto *closest = new Witness(si_);
         closest->linkRep(node);
         si_->copyState(closest->state, node->state);
         witnesses_->add(closest);
-        return closest;
     }
+
+    return closest;
 }
 
 std::vector<ompl::geometric::HySST::Motion *> ompl::geometric::HySST::extend(Motion *parentMotion, base::Goal *goalState)
 {
     // Initialize control inputs
-    control::RealVectorControlSpace *controlSpace_ = new control::RealVectorControlSpace(si_->getStateSpace(), minJumpInputValue_.size() > minFlowInputValue_.size() ? minJumpInputValue_.size() : minFlowInputValue_.size());
     int numInputs = minFlowInputValue_.size() > minJumpInputValue_.size() ? minFlowInputValue_.size() : minJumpInputValue_.size();
-
+    control::RealVectorControlSpace *controlSpace_ = new control::RealVectorControlSpace(si_->getStateSpace(), numInputs);  // Initialize control space as the size of the larger of the two input vectors
+    
     // Initialize hybrid times for solution pair
     std::pair<double, int> hybridTimeInitial = parentMotion->hybridTime->back();
     std::vector<std::pair<double, int>> *hybridTimes = new std::vector<std::pair<double, int>>();
@@ -221,30 +211,26 @@ std::vector<ompl::geometric::HySST::Motion *> ompl::geometric::HySST::extend(Mot
     // Generate random maximum flow time
     double random = rand();
     double randomFlowTimeMax = random / RAND_MAX * tM_;
-    double tFlow = 0; // Tracking variable for the amount of flow time used in a given continuous simulation step
 
+    double tFlow = 0; // Tracking variable for the amount of flow time used in a given continuous simulation step
     bool collision = false; // Set collision to false initially
 
     // Choose whether to begin growing the tree in the flow or jump regime
     bool in_jump = jumpSet_(parentMotion);
     bool in_flow = flowSet_(parentMotion);
-    bool priority = in_jump && in_flow ? random / RAND_MAX > 0.5 : in_jump; // If both are true, equal chance of being in flow or jump set.
+    bool priority = in_jump && in_flow ? random / RAND_MAX > 0.5 : in_jump; // If both are true, there is an equal chance of being in flow or jump set.
 
     // Sample and instantiate parent vertices and states in edges
     base::State *previousState = si_->allocState();
     si_->copyState(previousState, parentMotion->state);
-    auto *collisionParentMotion = parentMotion; // used to point to nn_->nearest(randomMotion);
+    auto *collisionParentMotion = parentMotion;
 
     // Allocate memory for the new edge
     std::vector<base::State *> *intermediateStates = new std::vector<base::State *>;
 
-    // Fill the edge with the starting vertex
-    base::State *parentState = si_->allocState();
-    si_->copyState(parentState, previousState);
-
     // Simulate in either the jump or flow regime
-    if (!priority)
-    { // Flow
+    if (!priority) // Flow
+    {
         // Randomly sample the flow inputs
         flowInputs = sampleFlowInputs_();
         control::Control *flowInput = controlSpace_->allocControl();
@@ -289,7 +275,7 @@ std::vector<ompl::geometric::HySST::Motion *> ompl::geometric::HySST::extend(Mot
             // State has passed all tests so update parent, edge, and temporary states
             si_->copyState(previousState, intermediateState);
 
-            // Add motion to tree or handle collision/goal
+            // Calculate distance to goal to check if solution has been found
             dist_ = distanceFunc_(intermediateState, goalState->as<base::GoalState>()->getState());
             bool inGoalSet = dist_ <= tolerance_;
 
@@ -299,9 +285,7 @@ std::vector<ompl::geometric::HySST::Motion *> ompl::geometric::HySST::extend(Mot
                 hybridTimeInitial.first = hybridTimes->back().first;
 
                 if (inGoalSet)
-                {
                     return std::vector<Motion *>{motion};
-                }
                 else if (collision)
                 {
                     collisionParentMotion = motion;
