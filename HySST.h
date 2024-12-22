@@ -549,6 +549,12 @@ namespace ompl
              * if not. */
             std::function<bool(Motion *motion)> unsafeSet_;
 
+            /** \brief The optimization objective. */
+            base::OptimizationObjectivePtr opt_;
+
+            /** \brief Calculate the cost of a motion. Default is using optimization objective. */
+            std::function<base::Cost (Motion *motion)> costFunc_;
+
             /** \brief Simulator for propgation under flow regime */
             std::function<base::State *(std::vector<double> input, base::State *curState, double tFlowMax, base::State *newState)> continuousSimulator_;
 
@@ -597,9 +603,6 @@ namespace ompl
 
             /** \brief The best solution cost we found so far. */
             base::Cost prevSolutionCost_{std::numeric_limits<double>::quiet_NaN()};
-
-            /** \brief The optimization objective. */
-            base::OptimizationObjectivePtr opt_;
 
             /** \brief The number of solutions allowed until the most optimal solution is returned. */
             int batchSize{1};

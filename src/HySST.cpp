@@ -81,17 +81,29 @@ void ompl::geometric::HySST::setup()
                           "functions w.r.t. state and control. This optimization objective will result in undefined "
                           "behavior",
                           getName().c_str());
+            costFunc_ =
+                    [this](Motion *motion) -> base::Cost
+            {
+                return opt_->motionCost(motion->parent->state, motion->state);
+            };
         }
         else
         {
-            OMPL_WARN("%s: No optimization object set. Using path length", getName().c_str());
+            OMPL_WARN("%s: No optimization object set. Using hybrid time", getName().c_str());
+            costFunc_ = [this](Motion *motion) -> base::Cost
+            {
+                return base::Cost(motion->hybridTime->back().first - motion->parent->hybridTime->back().first + motion->hybridTime->back().second - motion->parent->hybridTime->back().second);
+            };
             opt_ = std::make_shared<base::PathLengthOptimizationObjective>(si_);
-            pdef_->setOptimizationObjective(opt_);
         }
     }
     else
     {
         OMPL_WARN("%s: No optimization object set. Using path length", getName().c_str());
+        costFunc_ = [this](Motion *motion) -> base::Cost
+        {
+            return base::Cost(motion->hybridTime->back().first - motion->parent->hybridTime->back().first + motion->hybridTime->back().second - motion->parent->hybridTime->back().second);
+        };
         opt_ = std::make_shared<base::PathLengthOptimizationObjective>(si_);
     }
     prevSolutionCost_ = opt_->infiniteCost();
@@ -409,8 +421,11 @@ ompl::base::PlannerStatus ompl::geometric::HySST::solve(const base::PlannerTermi
 
         si_->copyState(rstate, dMotion[0]->state); // copy the new state to the random state pointer. First value of dMotion vector will always be the newest state, even if a collision occurs
 
-        base::Cost incCost = opt_->motionCost(nmotion->state, rstate);    // Compute incremental cost
+        base::Cost incCost = costFunc_(dMotion.front());    // Compute incremental cost
         base::Cost cost = opt_->combineCosts(nmotion->accCost_, incCost); // Combine total cost
+
+        if(dMotion.size() > 1) // If a collision occurs, add the secondary cost
+            cost = opt_->combineCosts(cost, costFunc_(dMotion[1]));
         Witness *closestWitness = findClosestWitness(rmotion);            // Find closest witness
 
         if (closestWitness->rep_ == rmotion || opt_->isCostBetterThan(cost, closestWitness->rep_->accCost_)) // If the newly propagated state is a child of the new representative of the witness (previously had no rep) or it dominates the old representative's cost
@@ -426,7 +441,7 @@ ompl::base::PlannerStatus ompl::geometric::HySST::solve(const base::PlannerTermi
             if (dMotion.size() > 1) // If collision occured during extension
             {
                 collisionParentMotion = dMotion[1];
-                collisionParentMotion->accCost_ = opt_->combineCosts(nmotion->accCost_, opt_->motionCost(nmotion->state, dMotion[1]->state));
+                collisionParentMotion->accCost_ = costFunc_(dMotion[1]);
                 nn_->add(collisionParentMotion);
             }
 
@@ -474,15 +489,7 @@ ompl::base::PlannerStatus ompl::geometric::HySST::solve(const base::PlannerTermi
                 oldRep->inactive_ = true; // Mark the node as inactive
                 while (oldRep->inactive_ && oldRep->numChildren_ == 0) // While the current node is inactive and is a leaf, remove it (non-leaf nodes have been marked inactive)
                 {
-                    nn_->remove(oldRep); // Remove from list of active nodes
-
-                    if (oldRep->state)
-                        si_->freeState(oldRep->state);
-
-                    oldRep->state = nullptr;
-
                     Motion *oldRepParent = oldRep->parent;
-                    delete oldRep;
                     oldRep = oldRepParent;
                     oldRep->numChildren_--;
 

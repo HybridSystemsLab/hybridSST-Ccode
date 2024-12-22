@@ -435,8 +435,8 @@ bool collisionChecker(ompl::geometric::HySST::Motion *motion, std::function<bool
 
 int main()
 {
-    // std::uint_fast32_t seed = 7;
-    // ompl::RNG::setSeed(seed);
+    std::uint_fast32_t seed = 7;
+    ompl::RNG::setSeed(seed);
     
     // Set the bounds of space
     ompl::base::RealVectorStateSpace *statespace = new ompl::base::RealVectorStateSpace(0);
