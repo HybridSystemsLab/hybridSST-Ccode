@@ -212,7 +212,7 @@ Trajectory polyFit3D(std::vector<std::vector<double>> states, std::vector<double
     for (int i = 5; i >= 0; i--)
         coeffs.push_back(Vec3(xCoeffs.coeffRef(i), yCoeffs.coeffRef(i), zCoeffs.coeffRef(i))); // Empty z coefficients
 
-    std::cout << "front t: " << tValues.front() << " back t: " << tValues.back() << std::endl;
+    // std::cout << "front t: " << tValues.front() << " back t: " << tValues.back() << std::endl;
     Trajectory traj(coeffs, tValues.front(), tValues.back());
     return traj;
 }
@@ -435,8 +435,8 @@ bool collisionChecker(ompl::geometric::HySST::Motion *motion, std::function<bool
 
 int main()
 {
-    std::uint_fast32_t seed = 7;
-    ompl::RNG::setSeed(seed);
+    // std::uint_fast32_t seed = 7;
+    // ompl::RNG::setSeed(seed);
     
     // Set the bounds of space
     ompl::base::RealVectorStateSpace *statespace = new ompl::base::RealVectorStateSpace(0);
@@ -489,7 +489,7 @@ int main()
     cHySST.setFlowInputRange(std::vector<double>{-0.5, -1}, std::vector<double>{1, 1});
     cHySST.setJumpInputRange(std::vector<double>{0, 0}, std::vector<double>{0, 0});
     cHySST.setUnsafeSet(unsafeSet);
-    cHySST.setCollisionChecker(collisionChecker);
+    // cHySST.setCollisionChecker(collisionChecker);
     cHySST.setSelectionRadius(0.03);
     cHySST.setPruningRadius(0.02);
 
@@ -499,5 +499,5 @@ int main()
 
     // print path to RViz2 data file
     std::ofstream outFile("../../examples/visualize/src/points.txt");
-    pdef->getSolutionPath()->as<ompl::geometric::PathGeometric>()->printAsMatrix(outFile);
+    // pdef->getSolutionPath()->as<ompl::geometric::PathGeometric>()->printAsMatrix(outFile);
 }
