@@ -533,6 +533,7 @@ ompl::base::PlannerStatus ompl::geometric::HySST::constructSolution(Motion *last
 
     // Construct a space information instance for this state space
     ompl::base::SpaceInformationPtr associatedSi(new ompl::base::SpaceInformation(space));
+    associatedSi->setup();
 
     // Create a new path object to store the solution path
     auto path(std::make_shared<PathGeometric>(associatedSi));
