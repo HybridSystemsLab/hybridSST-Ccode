@@ -446,7 +446,8 @@ ompl::base::PlannerStatus ompl::geometric::HySST::solve(const base::PlannerTermi
                     prevSolution_.push_back(solTrav);
                     solTrav = solTrav->parent;
                 }
-                prevSolutionCost_ = solution->accCost_;                
+                prevSolutionCost_ = solution->accCost_;      
+                OMPL_INFORM("Solution found with cost of %f", prevSolutionCost_.value());          
                 solutions++;
                 if(solutions >= batchSize)
                     break;
