@@ -428,15 +428,15 @@ bool collisionChecker(ompl::geometric::HySST::Motion *motion, std::function<bool
         new_state->as<ompl::base::RealVectorStateSpace::StateType>()->values[1] = collision_point[1];
         new_state->as<ompl::base::RealVectorStateSpace::StateType>()->values[2] = vel_collision_point[0];
         new_state->as<ompl::base::RealVectorStateSpace::StateType>()->values[3] = vel_collision_point[1];
-        collisionTime = &trueCollisionResult.collisionTime;
+        *collisionTime = trueCollisionResult.collisionTime;
     }
     return collision && run;
 }
 
 int main()
 {
-    std::uint_fast32_t seed = 7;
-    ompl::RNG::setSeed(seed);
+    // std::uint_fast32_t seed = 7;
+    // ompl::RNG::setSeed(seed);
     
     // Set the bounds of space
     ompl::base::RealVectorStateSpace *statespace = new ompl::base::RealVectorStateSpace(0);
@@ -492,6 +492,7 @@ int main()
     cHySST.setCollisionChecker(collisionChecker);
     cHySST.setSelectionRadius(0.03);
     cHySST.setPruningRadius(0.02);
+    cHySST.setBatchSize(4);
 
     // attempt to solve the planning problem within 10 seconds
     ompl::base::PlannerStatus solved = cHySST.solve(ompl::base::timedPlannerTerminationCondition(10000000));

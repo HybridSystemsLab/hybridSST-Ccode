@@ -156,7 +156,7 @@ ompl::geometric::HySST::Motion *ompl::geometric::HySST::selectNode(ompl::geometr
 
     for (auto &i : ret) // Find the active node with the best cost within the selection radius
     {
-        if (!i->inactive_ && opt_->isCostBetterThan(i->accCost_, bestCost))
+        if (!i->inactive_ && i->accCost_.value() < bestCost.value())
         {
             bestCost = i->accCost_;
             selected = i;
@@ -268,8 +268,8 @@ std::vector<ompl::geometric::HySST::Motion *> ompl::geometric::HySST::extend(Mot
 
             double *collisionTime = new double(-1.0);
             collision = collisionChecker_(motion, jumpSet_, ts, tf, intermediateState, collisionTime);
-
-            if (*collisionTime != -1.0)   
+            
+            if (*collisionTime != -1.0)
                 hybridTimes->back().first = *collisionTime;
                 
             // State has passed all tests so update parent, edge, and temporary states
@@ -326,6 +326,7 @@ std::vector<ompl::geometric::HySST::Motion *> ompl::geometric::HySST::extend(Mot
 
         // Add motions to tree, and free up memory allocated to newState
         collisionParentMotion->numChildren_++;
+        dist_ = distanceFunc_(motion->state, goalState->as<base::GoalState>()->getState());
         return std::vector<Motion *>{motion, collisionParentMotion};
     }
     return std::vector<Motion *>();
@@ -364,7 +365,7 @@ ompl::base::PlannerStatus ompl::geometric::HySST::solve(const base::PlannerTermi
         si_->copyState(motion->state, st);
         nn_->add(motion);
         motion->hybridTime->push_back(std::pair<double, int>(0.0, 0));
-        motion->accCost_ = opt_->identityCost(); // Initialize the accumulated cost to the identity cost
+        motion->accCost_ = base::Cost(0.0); // Initialize the accumulated cost to the identity cost
         findClosestWitness(motion);              // Set representatives for the witness set
     }
 
@@ -403,29 +404,29 @@ ompl::base::PlannerStatus ompl::geometric::HySST::solve(const base::PlannerTermi
 
         si_->copyState(rstate, dMotion[0]->state); // copy the new state to the random state pointer. First value of dMotion vector will always be the newest state, even if a collision occurs
 
-        base::Cost incCost = costFunc_(dMotion.front());    // Compute incremental cost
-        base::Cost cost = opt_->combineCosts(nmotion->accCost_, incCost); // Combine total cost
+        base::Cost incCost = costFunc_(dMotion[0]);    // Compute incremental cost
+        base::Cost cost = base::Cost(nmotion->accCost_.value() + incCost.value()); // Combine total cost
 
-        if(dMotion.size() > 1) // If a collision occurs, add the secondary cost
-            cost = opt_->combineCosts(cost, costFunc_(dMotion[1]));
         Witness *closestWitness = findClosestWitness(rmotion);            // Find closest witness
 
-        if (closestWitness->rep_ == rmotion || opt_->isCostBetterThan(cost, closestWitness->rep_->accCost_)) // If the newly propagated state is a child of the new representative of the witness (previously had no rep) or it dominates the old representative's cost
+        if (closestWitness->rep_ == rmotion || cost.value() < closestWitness->rep_->accCost_.value()) // If the newly propagated state is a child of the new representative of the witness (previously had no rep) or it dominates the old representative's cost
         {
             Motion *oldRep = closestWitness->rep_; // Set a copy of the old representative
             /* create a motion copy  of the newly propagated state */
             auto *motion = new Motion(si_);
             auto *collisionParentMotion = new Motion(si_);
 
-            motion = dMotion[0];
-            motion->accCost_ = cost;
-
             if (dMotion.size() > 1) // If collision occured during extension
             {
                 collisionParentMotion = dMotion[1];
-                collisionParentMotion->accCost_ = costFunc_(dMotion[1]);
+                collisionParentMotion->accCost_ = base::Cost(nmotion->accCost_.value() + costFunc_(dMotion[1]).value());
+                cost = base::Cost(costFunc_(dMotion[0]).value() + collisionParentMotion->accCost_.value()); // Since final motion contains a collision, final cost must include the pre-collision motion cost
+
                 nn_->add(collisionParentMotion);
             }
+
+            motion = dMotion[0];
+            motion->accCost_ = cost;
 
             nmotion->numChildren_++;
             closestWitness->linkRep(motion); // Create new edge and set the new node as the representative
@@ -434,7 +435,7 @@ ompl::base::PlannerStatus ompl::geometric::HySST::solve(const base::PlannerTermi
             
             // dist_ is calculated during the call to extend()
             bool solv = dist_ <= tolerance_;
-            if (solv && opt_->isCostBetterThan(motion->accCost_, prevSolutionCost_)) // If the new state is a solution and it has a lower cost than the previous solution
+            if (solv && motion->accCost_.value() < prevSolutionCost_.value()) // If the new state is a solution and it has a lower cost than the previous solution
             {
                 approxdif = dist_;
                 solution = motion;
