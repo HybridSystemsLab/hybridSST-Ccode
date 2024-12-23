@@ -449,7 +449,7 @@ ompl::base::PlannerStatus ompl::geometric::HySST::solve(const base::PlannerTermi
                 prevSolutionCost_ = solution->accCost_;      
                 OMPL_INFORM("Solution found with cost of %f", prevSolutionCost_.value());          
                 solutions++;
-                if(solutions >= batchSize)
+                if(solutions >= batchSize_)
                     break;
             }
             if (solution == nullptr && dist_ < approxdif) // If no solution found and distance to goal of this new state is closer than before (because no guarantee of probabilistic completeness). Also where approximate solutions are filled.

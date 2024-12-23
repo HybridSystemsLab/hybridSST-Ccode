@@ -311,6 +311,13 @@ namespace ompl
                 collisionChecker_ = function;
             }
 
+            /** \brief Set batch size */
+            void setBatchSize(int batchSize) {
+                if(batchSize < 1)
+                    throw Exception("Batch size must be greater than 0");
+                batchSize_ = batchSize;
+            }
+
             /** \brief Set the flow input sampling mode. See
              * https://github.com/ompl/ompl/blob/main/src/ompl/util/RandomNumbers.h for
              * details on each available mode.
@@ -605,7 +612,7 @@ namespace ompl
             base::Cost prevSolutionCost_{std::numeric_limits<double>::quiet_NaN()};
 
             /** \brief The number of solutions allowed until the most optimal solution is returned. */
-            int batchSize{1};
+            int batchSize_{1};
         };
     }
 }
