@@ -75,12 +75,13 @@ public:
     rclcpp::Publisher<visualization_msgs::msg::MarkerArray>::SharedPtr marker_pub_;
     rclcpp::Publisher<visualization_msgs::msg::Marker>::SharedPtr marker_pub;
     rclcpp::TimerBase::SharedPtr timer_;
+
     PointMatrixPublisher(std::vector<std::vector<double>> matrix, std::vector<double> index_matrix, std::string obstacle) : Node("point_matrix_publisher")
     {
         // Create publishers for point matrix and obstacles
         marker_pub_ = this->create_publisher<visualization_msgs::msg::MarkerArray>("point_matrix", 10);
         marker_pub = this->create_publisher<visualization_msgs::msg::Marker>("obstacles", 10);
-        
+
         // Create a timer to publish points periodically
         timer_ = this->create_wall_timer(std::chrono::milliseconds(1000), [this, matrix, index_matrix, obstacle]()
                                          { this->publishPoints(matrix, index_matrix, obstacle); });
@@ -142,7 +143,7 @@ private:
             else
             {
                 marker.type = visualization_msgs::msg::Marker::SPHERE;
-                if (matrix[row][matrix[0].size() - 1] != matrix[row - 1][matrix[0].size() - 1]) {
+                if(matrix[row][matrix[0].size() - 1] != matrix[row - 1][matrix[0].size() - 1]) {
                     marker.scale.x = 0.15;
                     marker.scale.y = 0.15;
                     marker.scale.z = 0.15;
@@ -243,16 +244,29 @@ private:
     }
 };
 
+std::shared_ptr<PointMatrixPublisher> node;
+
+void signal_callback_handler(int signum) {
+   auto marker_array_msg = std::make_shared<visualization_msgs::msg::MarkerArray>();
+   visualization_msgs::msg::Marker marker;
+   marker.action = visualization_msgs::msg::Marker::DELETEALL;
+   marker_array_msg->markers.push_back(marker);
+   node->marker_pub_->publish(*marker_array_msg);
+   rclcpp::sleep_for(std::chrono::milliseconds(100)); // Give time for publish
+   exit(signum);
+}
+
 int main(int argc, char *argv[])
 {
     rclcpp::init(argc, argv);
-
+    signal(SIGINT, signal_callback_handler);
     // Read the coordinate indices and points from files
     std::vector<double> index_matrix = read_file_as_matrix("coordinate_indices.txt")[0];
     std::vector<std::vector<double>> matrix = read_file_as_matrix("src/points.txt");
     std::string obstacle = read_file_as_string("obstacles.txt");
 
     // Create and spin the PointMatrixPublisher node
-    rclcpp::spin(std::make_shared<PointMatrixPublisher>(matrix, index_matrix, obstacle));
+    node = std::make_shared<PointMatrixPublisher>(matrix, index_matrix, obstacle);
+    rclcpp::spin(node);
     return 0;
 }
