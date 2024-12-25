@@ -129,10 +129,136 @@ For more information about the project's available random sampling distributions
 |HALF_NORMAL_INT| Generate a random integer using a half-normal distribution. The value is within specified bounds ([r_min, r_max]), but with a bias towards r_max. The function is implemented on top of halfNormalReal() | r_min, r_max, focus (default is 3.0)
 
 
-## <span id="2">02. Acknowledgments
+Below we include a code logic flow chart and UML Diagram applicable to both this planner and the hybrid SST algorithm (see [Hybrid SST](https://github.com/HybridSystemsLab/hybridSST-Ccode)).
+![Flowchart](assets/code-flow.png)
+![UML](assets/UML.png)
+
+## <span id="3">03. Instructions for Reuse
+Create a file, `example_name.cpp` in `${rootDirectory}/examples/`. Replace `example_name` with the desired name of your file. Next, within your file, enter the following: 
+```C++
+#include "../HyRRT.h"
+#include "ompl/base/Planner.h"
+#include "ompl/base/spaces/RealVectorStateSpace.h"
+#include "ompl/geometric/PathGeometric.h"
+#include <fstream> // For file I/O
+#include <iomanip> // For formatting output
+```
+Then, you will need to instantiate all necessary functions and attributes to initialize the motion planner, along with any optional functions and attributes as needed. See `HyRRT.h` for full method signatures and either `HyRRT.h` or the `README.md` in either tool directory for full attribute requirements. Below is a list of all mandatory functions and attributes. 
+* continuousSimulator_ 
+* discreteSimulator_
+* flowSet_
+* jumpSet_
+* unsafeSet_
+* tM_
+* maxJumpInputValue_
+* minJumpInputValue_
+* maxFlowInputValue_
+* minFlowInputValue_
+* flowStepDuration_
+* pruningRadius_ (only for cHyRRT)
+* selectionRadius_ (only for cHyRRT)
+
+After you have instantiated all necessary methods and variables, enter the following, customizing as instructed by the in-line comments:
+```C++
+int main()
+{
+ompl::base::RealVectorStateSpace *statespace = new ompl::base::RealVectorStateSpace(0);
+    statespace->addDimension(-1, 1); // Add however many dimensions there states in your state space
+
+
+    ompl::base::StateSpacePtr space(statespace);
+
+
+    // Construct a space information instance for this state space
+    ompl::base::SpaceInformationPtr si(new ompl::base::SpaceInformation(space));
+
+
+    si->setup();
+
+
+    // Set start state. Here, we set it to be (1, 2)
+    ompl::base::ScopedState<> start(space);
+    start->as<ompl::base::RealVectorStateSpace::StateType>()->values[0] = 1;
+    start->as<ompl::base::RealVectorStateSpace::StateType>()->values[1] = 2;
+
+
+    // Set goal state. Here, we set it to be (5, 4)
+    ompl::base::ScopedState<> goal(space);
+    goal->as<ompl::base::RealVectorStateSpace::StateType>()->values[0] = 5;
+    goal->as<ompl::base::RealVectorStateSpace::StateType>()->values[1] = 4;
+
+
+    // Create a problem instance
+    ompl::base::ProblemDefinitionPtr pdef(new ompl::base::ProblemDefinition(si));
+
+
+    // Set the start and goal states
+    pdef->setStartAndGoalStates(start, goal);
+
+
+    ompl::geometric::HyRRT cHyRRT(si);
+
+
+    // Set parameters
+    cHyRRT.setProblemDefinition(pdef);
+    cHyRRT.setup();
+```
+Now, you will assign your previously instantiated methods and variables to the tool, using the corresponding “set” function. For example, we can set `tM_` with the following code snippet:
+```
+    cHyRRT.setTm(tM_);
+```
+In general, the setter methods can be referenced as `cHyRRT.set___();`, where the name of the attribute (without the rear underscore) will replace the underline in `cHyRRT.set___();`. See `HyRRT.h` for full setter method signatures. 
+
+To close out our example file, we will execute the tool by invoking the `solve` method as follows:
+
+```C++
+    // attempt to solve the planning problem within 10 seconds. Can replace with any other termination condition
+    ompl::base::PlannerStatus solved = cHyRRT.solve(ompl::base::timedPlannerTerminationCondition(10));
+    std::cout << "solution status: " << solved << std::endl;
+
+
+    // print path to RViz2 data file
+    std::ofstream outFile("../../examples/visualize/src/points.txt");	// address relative to the location of this executable, ${rootDirectory}/build/examples/
+    pdef->getSolutionPath()->as<ompl::geometric::PathGeometric>()->printAsMatrix(outFile); 	// output trajectory into output file for visualization
+}
+```
+
+Now, if using cHyRRT, add the following code snippet to line 17 of ~/Documents/Github/hybridRRT-Ccode/examples/CMakeLists.txt:
+```CMake
+# Add executable for user example
+add_executable(example_name example_name.cpp)
+target_link_libraries(example_name HyRRT ${OMPL_LIBRARIES})
+```
+
+If using cHyRRT, add the following code snippet to line 17 of ${rootDirectory}/examples/CMakeLists.txt:
+
+```CMake
+# Add executable for user example
+add_executable(example_name example_name.cpp)
+target_link_libraries(example_name HyRRT ${OMPL_LIBRARIES})
+```
+Finally, we will build the example. In a new Terminal window, run the following (replace all instances of `hybridSST-Ccode` with `hybridRRT-Ccode` if using cHyRRT):
+```Bash
+cd  ${rootDirectory}/build/examples
+make
+./example_name
+cd  ${rootDirectory}/examples/visualize
+./rosrun.bash
+```
+
+## Code Structure and Method Details
+# UML Diagram
+Requirements of each customizable parameter can be found in the `README.md` of either tool directory.
+![](UML.png)
+
+# Code Structure Flowchart
+![](code-flow.png)
+
+
+## <span id="3">03. Acknowledgments
 * Our collision checker in the multicopter (collision-resilient drone) example are from UC Berkeley's HiPeRLab publication on [Exploiting collisions for sampling-based multicopter motion planning](https://doi.org/10.48550/arXiv.2011.04091). Tools in the CommonMath and Quartic directories are from UC Berkeley's HiPeRLab's [agri-fly repository](https://github.com/muellerlab/agri-fly). 
 
 
-## <span id="3">03. Maintenance
+## <span id="4">04. Maintenance
 
 Feel free to contact us if you have any question.
