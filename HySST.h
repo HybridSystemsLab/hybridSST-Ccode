@@ -48,8 +48,7 @@ namespace ompl
     {
         /**
            @anchor gHySST
-           @par Short description
-           \ref gHySST "HySST" (Stable Sparse RRT) is an asymptotically near-optimal incremental
+           @par Hybrid Stable-sparse RRT (HySST) is an asymptotically near-optimal incremental
            sampling-based motion planning algorithm. It is recommended for geometric problems
            to use an alternative method that makes use of a steering function. Using HySST for
            geometric problems does not take advantage of this function.
@@ -63,47 +62,53 @@ namespace ompl
             /** \brief Constructor */
             HySST(const base::SpaceInformationPtr &si);
 
+            /** \brief Destructor */
             ~HySST() override;
 
+            /** \brief Set the problem instance to solve */
             void setup() override;
 
             /** \brief Representation of a motion
-
-                This only contains pointers to parent motions as we
-                only need to go backwards in the tree. */
+             * @par This only contains pointers to parent motions as we
+             * only need to go backwards in the tree. 
+             */
             class Motion
             {
             public:
+                /// \brief Default constructor
                 Motion() = default;
 
-                /** \brief Constructor that allocates memory for the state and the control */
-                Motion(const base::SpaceInformationPtr &si)
-                  : state(si->allocState())
-                {
-                }
+                /// \brief Constructor that allocates memory for the state
+                Motion(const base::SpaceInformationPtr &si) : state(si->allocState()) {}
 
+                /// \brief Destructor
                 virtual ~Motion() = default;
 
+                /** \brief Get the state contained by the motion */
                 virtual base::State *getState() const
                 {
                     return state;
                 }
+
+                /** \brief Get the parent motion in the tree */
                 virtual Motion *getParent() const
                 {
                     return parent;
                 }
+                
+                /// \brief The total cost accumulated from the root to this vertex
                 base::Cost accCost_{0.};
 
-                /** \brief The state contained by the motion */
+                /// \brief The state contained by the motion
                 base::State *state{nullptr};
 
-                /** \brief The parent motion in the exploration tree */
+                /// \brief The parent motion in the exploration tree
                 Motion *parent{nullptr};
 
-                /** \brief Number of children */
+                /// \brief Number of children. Starting with 0.
                 unsigned numChildren_{0};
 
-                /** \brief If inactive, this node is not considered for selection.*/
+                /// \brief If inactive, this node is not considered for selection.
                 bool inactive_{false};
 
                 /// \brief The integration steps defining the edge of the motion, between the parent and child vertices
@@ -116,24 +121,31 @@ namespace ompl
                 std::vector<std::pair<double, int>> *hybridTime = new std::vector<std::pair<double, int>>();
             };
 
-            /** \brief Continue solving for some amount of time. Return true if solution was found. */
+            /** 
+             * \brief Main solve function. 
+             * @par Continue solving for some amount of time.
+             * @param ptc The condition to terminate solving.
+             * @return true if solution was found. */
             base::PlannerStatus solve(const base::PlannerTerminationCondition &ptc) override;
 
+            /** 
+             * \brief Get the PlannerData object associated with this planner
+             * @param data the PlannerData object storing the edges and vertices of the solution
+             */
             void getPlannerData(base::PlannerData &data) const override;
 
-            /** \brief Clear datastructures. Call this function if the
-                input data to the planner has changed and you do not
-                want to continue planning */
+            /** \brief Clear all allocated memory. */
             void clear() override;
 
             /**
-                \brief Set the radius for selecting nodes relative to random sample.
-
-                This radius is used to mimic behavior of RRT* in that it promotes
-                extending from nodes with good path cost from the root of the tree.
-                Making this radius larger will provide higher quality paths, but has two
-                major drawbacks; exploration will occur much more slowly and exploration
-                around the boundary of the state space may become impossible. */
+             * \brief Set the radius for selecting nodes relative to random sample.
+             * @par This radius is used to mimic behavior of RRT* in that it promotes
+             * extending from nodes with good path cost from the root of the tree.
+             * Making this radius larger will provide higher quality paths, but has two
+             * major drawbacks; exploration will occur much more slowly and exploration
+             * around the boundary of the state space may become impossible. 
+             * @param selectionRadius The maximum distance from the random sampled vertex, for a vertex in the search tree to be considered
+             */
             void setSelectionRadius(double selectionRadius)
             {
                 if (selectionRadius < 0)
@@ -141,22 +153,26 @@ namespace ompl
                 selectionRadius_ = selectionRadius;
             }
 
-            /** \brief Get the selection radius the planner is using */
+            /** 
+             * \brief Get the selection radius the planner is using 
+             * @return The selection radius
+             */
             double getSelectionRadius() const
             {
                 return selectionRadius_;
             }
 
             /**
-                \brief Set the radius for pruning nodes.
-
-                This is the radius used to surround nodes in the witness set.
-                Within this radius around a state in the witness set, only one
-                active tree node can exist. This limits the size of the tree and
-                forces computation to focus on low path costs nodes. If this value
-                is too large, narrow passages will be impossible to traverse. In addition,
-                children nodes may be removed if they are not at least this distance away
-                from their parent nodes.*/
+             * \brief Set the radius for pruning nodes.
+             * @par This is the radius used to surround nodes in the witness set.
+             * Within this radius around a state in the witness set, only one
+             * active tree node can exist. This limits the size of the tree and
+             * forces computation to focus on low path costs nodes. If this value
+             * is too large, narrow passages will be impossible to traverse. In addition,
+             * children nodes may be removed if they are not at least this distance away
+             * from their parent nodes.
+             * @param pruningRadius The radius used to prune vertices in the search tree
+             */
             void setPruningRadius(double pruningRadius)
             {
                 if (pruningRadius < 0)
@@ -164,7 +180,10 @@ namespace ompl
                 pruningRadius_ = pruningRadius;
             }
 
-            /** \brief Get the pruning radius the planner is using */
+            /** 
+             * \brief Get the pruning radius the planner is using 
+             * @return The pruning radius
+             */
             double getPruningRadius() const
             {
                 return pruningRadius_;
@@ -182,7 +201,10 @@ namespace ompl
                 setup();
             }
 
-            // See ompl::RNG for more information about each distribution
+            /**
+             * \brief Set of available random input methods
+             * @par See https://ompl.kavrakilab.org/classompl_1_1RNG.html for more information about each distribution
+             */
             enum inputSamplingMethods_
             {
                 UNIFORM_01,
@@ -196,7 +218,11 @@ namespace ompl
                 EURLER_RPY
             };
 
-            /** \brief Set the input range the planner is supposed to use. */
+            /** 
+             * \brief Define the continuous interval over which the flow input is sampled. 
+             * @param min the minimum input values
+             * @param max the maximum input values
+             */
             void setFlowInputRange(std::vector<double> min, std::vector<double> max)
             {
                 int size = max.size() > min.size() ? max.size() : min.size();
@@ -211,7 +237,11 @@ namespace ompl
                 maxFlowInputValue_ = max;
             }
 
-            /** \brief Set the input range the planner is supposed to use. */
+            /** 
+             * \brief Define the continuous interval over which the flow input is sampled. 
+             * @param min the minimum input values
+             * @param max the maximum input values
+             */
             void setJumpInputRange(std::vector<double> min, std::vector<double> max)
             {
                 int size = max.size() > min.size() ? max.size() : min.size();
@@ -226,9 +256,11 @@ namespace ompl
                 maxJumpInputValue_ = max;
             }
 
-            /** \brief Set the maximum time allocated to a full continuous simulator step.
-             * The duration must be greater than 0, and greater than than the time
-             * allocated to a single continuous simulator call. */
+            /** 
+             * \brief Set the maximum time allocated to a full continuous simulator step.
+             * @param tM the maximum time allocated. Must be greater than 0, and greater than than the time
+             * allocated to a single continuous simulator call. 
+             */
             void setTm(double tM)
             {
                 if (tM <= 0)
@@ -242,10 +274,12 @@ namespace ompl
                 tM_ = tM;
             }
 
-            /** \brief Set the time allocated to a single continuous simulator call,
-             * within the full period of a continuous simulator step. The duration must be
-             * greater than 0, and less than the time allocated to a full continuous
-             * simulator step. */
+            /** 
+             * \brief Set the time allocated to a single continuous simulator call, within the full period of a continuous simulator step. 
+             * @param duration the time allocated per simulator step. Must be
+             * greater than 0 and less than the time allocated to a full continuous
+             * simulator step. 
+             */
             void setFlowStepDuration(double duration)
             {
                 if (duration <= 0)
@@ -258,8 +292,10 @@ namespace ompl
                 flowStepDuration_ = duration;
             }
 
-            /** \brief Set distance tolerance from goal state. Tolerance must be greater
-             * than 0. */
+            /** 
+             * \brief Define the jump set
+             * @param jumpSet the jump set associated with the hybrid system. 
+             */
             void setGoalTolerance(double tolerance)
             {
                 if (tolerance < 0)
@@ -267,60 +303,86 @@ namespace ompl
                 tolerance_ = tolerance;
             }
 
-            /** \brief Set the jump set. */
+            /** 
+             * \brief Define the jump set
+             * @param jumpSet the jump set associated with the hybrid system. 
+             */
             void setJumpSet(std::function<bool(Motion *)> jumpSet)
             {
                 jumpSet_ = jumpSet;
             }
 
-            /** \brief Set the flow set. */
+            /** 
+             * \brief Define the flow set
+             * @param flowSet the flow set associated with the hybrid system.
+             */
             void setFlowSet(std::function<bool(Motion *)> flowSet)
             {
                 flowSet_ = flowSet;
             }
 
-            /** \brief Set the unsafe set. */
+            /** 
+             * \brief Define the unsafe set
+             * @param unsafeSet the unsafe set associated with the hybrid system.
+             */
             void setUnsafeSet(std::function<bool(Motion *)> unsafeSet)
             {
                 unsafeSet_ = unsafeSet;
             }
 
-            /** \brief Set the distance measurement function. */
+            /** 
+             * \brief Define the distance measurement function
+             * @param function the distance function associated with the motion planning problem.
+             */
             void setDistanceFunction(std::function<double(base::State *, base::State *)> function)
             {
                 distanceFunc_ = function;
             }
 
-            /** \brief Set the discrete dyanmics simulator. */
+            /** 
+             * \brief Define the discrete dynamics simulator
+             * @param function the discrete simulator associated with the hybrid system.
+             */
             void setDiscreteSimulator(std::function<base::State *(base::State *curState, std::vector<double> u, base::State *newState)> function)
             {
                 discreteSimulator_ = function;
             }
 
-            /** \brief Set the continuous dyanmics simulator. */
+            /** 
+             * \brief Define the continuous dynamics simulator
+             * @param function the continuous simulator associated with the hybrid system.
+             */
             void setContinuousSimulator(std::function<base::State *(std::vector<double> inputs, base::State *curState, double tFlowMax, 
                                         base::State *newState)> function)
             {
                 continuousSimulator_ = function;
             }
 
-            /** \brief Set the collision checker. */
+            /** 
+             * \brief Define the collision checker
+             * @param function the collision checker associated with the state space. Default is a point-by-point collision checker.
+             */
             void setCollisionChecker(std::function<bool(Motion *motion, std::function<bool(Motion *motion)> obstacleSet, 
                                      double ts, double tf, base::State *newState, double *collisionTime)> function)
             {
                 collisionChecker_ = function;
             }
 
-            /** \brief Set batch size */
+            /** 
+             * \brief Set solution batch size 
+             * @param batchSize the number of solutions to be generated by the planner until the one with the best cost is returned.
+             */
             void setBatchSize(int batchSize) {
                 if(batchSize < 1)
                     throw Exception("Batch size must be greater than 0");
                 batchSize_ = batchSize;
             }
 
-            /** \brief Set the flow input sampling mode. See
-             * https://github.com/ompl/ompl/blob/main/src/ompl/util/RandomNumbers.h for
-             * details on each available mode.
+            /** 
+             * \brief Set the flow input sampling mode. 
+             * @par See https://github.com/ompl/ompl/blob/main/src/ompl/util/RandomNumbers.h for details on each available mode.
+             * @param mode the sampling mode.
+             * @param inputs the required parameters for the given sampling mode. Not all modes require parameters.
              */
             void setFlowInputSamplingMode(inputSamplingMethods_ mode, std::vector<double> inputs)
             {
@@ -354,9 +416,11 @@ namespace ompl
                     throw Exception("Invalid number of input parameters for input sampling mode.");
             }
 
-            /** \brief Set the jump input sampling mode. See
-             * https://github.com/ompl/ompl/blob/main/src/ompl/util/RandomNumbers.h for
-             * details on each available mode.
+            /** 
+             * \brief Set the jump input sampling mode. 
+             * @par See https://github.com/ompl/ompl/blob/main/src/ompl/util/RandomNumbers.h for details on each available mode.
+             * @param mode the sampling mode.
+             * @param inputs the required parameters for the given sampling mode. Not all modes require parameters.
              */
             void setJumpInputSamplingMode(inputSamplingMethods_ mode, std::vector<double> inputs)
             {
@@ -422,23 +486,38 @@ namespace ompl
             }
 
         protected:
+            /// \brief Representation of a witness vertex in the search tree
             class Witness : public Motion
             {
             public:
+                /// \brief Default Constructor
                 Witness() = default;
 
-                Witness(const base::SpaceInformationPtr &si) : Motion(si)
-                {
-                }
+                /// \brief Constructor that allocates memory for the state
+                Witness(const base::SpaceInformationPtr &si) : Motion(si) {}
+
+                /** 
+                 * \brief Get the state contained by the representative motion 
+                 * @return The state contained by the representative motion
+                 */
                 base::State *getState() const override
                 {
                     return rep_->state;
                 }
+
+                /** 
+                 * \brief Get the state contained by the parent motion of the representative motion 
+                 * @return The state contained by the parent motion of the representative motion
+                 */
                 Motion *getParent() const override
                 {
                     return rep_->parent;
                 }
 
+                /** 
+                 * \brief Set the representative of the witness
+                 * \param lRep The representative motion
+                 */
                 void linkRep(Motion *lRep)
                 {
                     rep_ = lRep;
@@ -448,7 +527,10 @@ namespace ompl
                 Motion *rep_{nullptr};
             };
 
-            /** \brief Random sampler for the full vector of flow input. */
+            /** 
+             * \brief Random sampler for the full vector of flow input. 
+             * @return a vector of inputs (as doubles) sampled
+             */
             std::function<std::vector<double>(void)> sampleFlowInputs_ = [this](void)
             {
                 std::vector<double> u;
@@ -457,7 +539,10 @@ namespace ompl
                 return u;
             };
 
-            /** \brief Random sampler for the the full vector of jump input. */
+            /** 
+             * \brief Random sampler for the full vector of jump input. 
+             * @return a vector of inputs (as doubles) sampled
+             */
             std::function<std::vector<double>(void)> sampleJumpInputs_ = [this](void)
             {
                 std::vector<double> u;
@@ -466,14 +551,48 @@ namespace ompl
                 return u;
             };
 
-            /** \brief Random sampler for one value of the flow input. */
+            /** 
+             * \brief Random sampler for one value of flow input. 
+             * @return a single, double-valued sampled input
+             */
             std::function<double(int i)> getRandFlowInput_ = [this](int i) { return randomSampler_->uniformReal(minFlowInputValue_[i], maxFlowInputValue_[i]); };
 
-            /** \brief Random sampler for one value of the jump input. */
+            /** 
+             * \brief Random sampler for one value of jump input. 
+             * @return a single, double-valued sampled input
+             */
             std::function<double(int i)> getRandJumpInput_ = [this](int i) { return randomSampler_->uniformReal(minJumpInputValue_[i], maxJumpInputValue_[i]); };
 
-            /** \brief Collision checker. Optional is point-by-point collision checking
-             * using the jump set. */
+            /// \brief The most recent goal motion.  Used for PlannerData computation
+            Motion *lastGoalMotion_{nullptr};
+
+            /** \brief Runs the initial setup tasks for the tree. */
+            void initTree(void);
+
+            /** 
+             * \brief Sample the random motion. 
+             * @param randomMotion The motion to be initialized
+             */
+            void randomSample(Motion *randomMotion);
+
+            /// \brief A nearest-neighbors datastructure containing the tree of motions
+            std::shared_ptr<NearestNeighbors<Motion *>> nn_;
+
+            /**
+             * The following are all customizeable parameters,
+             * and affect how @b cHySST generates trajectories.
+             * Customize using setter functions above. */
+
+            /**
+             * \brief Collision checker. Default is point-by-point collision checking using the jump set.
+             * @param motion The motion to check for collision
+             * @param obstacleSet A function that returns true if the motion's solution pair intersects with the obstacle set
+             * @param ts The start time of the motion. Default is -1.0
+             * @param tf The end time of the motion. Default is -1.0
+             * @param newState The collision state (if a collision occurs)
+             * @param collisionTime The time of collision (if a collision occurs). If no collision occurs, this value is -1.0
+             * @return true if a collision occurs, false otherwise
+             */
             std::function<bool(Motion *motion,
                                std::function<bool(Motion *motion)> obstacleSet,
                                double ts, double tf, base::State *newState, double *collisionTime)>
@@ -487,131 +606,150 @@ namespace ompl
                 return false;
             };
 
-            /** \brief Name of input sampling method, default is "uniform" */
+            /// \brief Name of input sampling method, default is "uniform"
             inputSamplingMethods_ inputSamplingMethod_{UNIFORM_01};
 
-            /** \brief The most recent goal motion.  Used for PlannerData computation */
-            Motion *lastGoalMotion_{nullptr};
-
-            base::StateSpacePtr setup_;
-
-            /** \brief Runs the initial setup tasks for the tree. */
-            void initTree(void);
-
-            /** \brief Sample the random motion. */
-            void randomSample(Motion *randomMotion);
-
-            /** \brief A nearest-neighbors datastructure containing the tree of motions */
-            std::shared_ptr<NearestNeighbors<Motion *>> nn_;
-
-            /**
-             * The following are all customizeable parameters,
-             * and affect how @b cHySST generates trajectories.
-             * Customize using setter functions above. */
-
-            /** \brief Compute distance between states, default is Euclidean distance */
+            /** 
+             * \brief Compute distance between states, default is Euclidean distance 
+             * @param state1 The first state
+             * @param state2 The second state
+             * @return The distance between the two states
+             */
             std::function<double(base::State *state1, base::State *state2)> distanceFunc_ = [this](base::State *state1, base::State *state2) -> double
             {
                 return si_->distance(state1, state2);
             };
 
-            /** \brief The maximum flow time for a given flow propagation step. Must be
-             * set by the user */
+            /// \brief The maximum flow time for a given flow propagation step. Must be set by the user.
             double tM_{-1.};
 
-            /** \brief The distance tolerance from the goal state for a state to be
-             * regarded as a valid final state. Default is .1 */
+            /// \brief The distance tolerance from the goal state for a state to be regarded as a valid final state. Default is .1
             double tolerance_{.1};
 
+            /// \brief The minimum step length for a given flow propagation step. Default value is 1e-6
             double minStepLength = 1e-06;
 
-            /** \brief The flow time for a given integration step, within a flow
-             * propagation step. Must be set by user */
+            /// \brief The flow time for a given integration step, within a flow propagation step. Must be set by user.
             double flowStepDuration_;
 
-            /** \brief Minimum input value */
+            /// \brief Minimum flow input values
             std::vector<double> minFlowInputValue_;
 
-            /** \brief Maximum input value */
+            /// \brief Maximum flow input values
             std::vector<double> maxFlowInputValue_;
 
-            /** \brief Minimum input value */
+            /** \brief Minimum jump input value */
             std::vector<double> minJumpInputValue_;
 
-            /** \brief Maximum input value */
+            /** \brief Maximum jump input value */
             std::vector<double> maxJumpInputValue_;
 
-            /** \brief Simulator for propgation under jump regime */
+            /** 
+             * \brief Simulator for propagation under jump regime
+             * @param curState The current state
+             * @param u The input
+             * @param newState The newly propagated state
+             * @return The newly propagated state
+             */
             std::function<base::State *(base::State *curState, std::vector<double> u, base::State *newState)> discreteSimulator_;
 
-            /** \brief Function that returns true if a state is in the jump set, and false
-             * if not. */
+            /** 
+             * \brief Function that returns true if a motion intersects with the jump set, and false if not. 
+             * @param motion The motion to check
+             * @return True if the state is in the jump set, false if not
+             */
             std::function<bool(Motion *motion)> jumpSet_;
 
-            /** \brief Function that returns true if a state is in the flow set, and false
-             * if not. */
+            /** 
+             * \brief Function that returns true if a motion intersects with the flow set, and false if not. 
+             * @param motion The motion to check
+             * @return True if the state is in the flow set, false if not
+             */
             std::function<bool(Motion *motion)> flowSet_;
 
-            /** \brief Function that returns true if a state is in the flow set, and false
-             * if not. */
+            /** 
+             * \brief Function that returns true if a motion intersects with the unsafe set, and false if not. 
+             * @param motion The motion to check
+             * @return True if the state is in the unsafe set, false if not
+             */
             std::function<bool(Motion *motion)> unsafeSet_;
 
-            /** \brief The optimization objective. */
+            /// \brief The optimization objective. Default is a shortest path objective.
             base::OptimizationObjectivePtr opt_;
 
             /** \brief Calculate the cost of a motion. Default is using optimization objective. */
             std::function<base::Cost (Motion *motion)> costFunc_;
 
-            /** \brief Simulator for propgation under flow regime */
+            /** 
+             * \brief Simulator for propagation under flow regime
+             * @param input The input
+             * @param curState The current state
+             * @param tFlowMax The random maximum flow time
+             * @param newState The newly propagated state
+             * @return The newly propagated state
+             */
             std::function<base::State *(std::vector<double> input, base::State *curState, double tFlowMax, base::State *newState)> continuousSimulator_;
 
-            /** \brief Random sampler for the input. Default constructor always seeds a
-             * different value, and returns a uniform real distribution. */
+            /// \brief Random sampler for the input. Default constructor always seeds a different value, and returns a uniform real distribution.
             RNG *randomSampler_ = new RNG();
 
-            /** \brief Construct the path, starting at the last edge. */
+            /** 
+             * \brief Construct the path, starting at the last edge. 
+             * @param lastMotion The last motion in the solution
+             * @return the planner status (APPROXIMATE, EXACT, or UNKNOWN)
+             */
             base::PlannerStatus constructSolution(Motion *lastMotion);
 
-            /** \brief Name of input sampling method, default is "uniform" */
+            /// \brief Input sampling parameters
             std::vector<double> inputSamplingParameters_{};
 
-            /** \brief Finds the best node in the tree withing the selection radius around a random sample.*/
+            /** 
+             * \brief Finds the best node in the tree withing the selection radius around a random sample.
+             * @param sample The random sampled vertex to find the closest witness to.
+             */
             Motion *selectNode(Motion *sample);
 
-            /** \brief Find the closest witness node to a newly generated potential node.*/
+            /** 
+             * \brief Find the closest witness node to a newly generated potential node.
+             * @param node The vertex to find the closest witness to.
+             */
             Witness *findClosestWitness(Motion *node);
 
-            /** \brief Randomly propagate a new edge.*/
+            /** 
+             * \brief Randomly propagate a new edge.
+             * @param m The motion to extend
+             * @param goal The goal state (to check if within tolerance of goal state)
+             */
             std::vector<Motion *> extend(Motion *m, base::Goal *goalState);
 
             /** \brief Free the memory allocated by this planner */
             void freeMemory();
 
-            /** \brief State sampler */
+            /// \brief State sampler
             base::StateSamplerPtr sampler_;
 
-            /** \brief A nearest-neighbors datastructure containing the tree of witness motions */
+            /// \brief A nearest-neighbors datastructure containing the tree of witness motions
             std::shared_ptr<NearestNeighbors<Motion *>> witnesses_;
 
-            /** \brief The radius for determining the node selected for extension. Delta_s. */
+            /// \brief The radius for determining the node selected for extension. Delta_s.
             double selectionRadius_{-1.};   
 
-            /** \brief The radius for determining the size of the pruning region. Delta_bn. */
+            /// \brief The radius for determining the size of the pruning region. Delta_bn.
             double pruningRadius_{-1.};
 
-            /** \brief The random number generator */
+            /// \brief The random number generator
             RNG rng_;
 
-            /** \brief Minimum distance from goal of generated trajectories. */
+            /// \brief Minimum distance from goal to final vertex of generated trajectories.
             double dist_;
 
-            /** \brief The best solution we found so far. */
+            /// \brief The best solution (with best cost) we have found so far.
             std::vector<Motion *> prevSolution_;
 
-            /** \brief The best solution cost we found so far. */
+            /// \brief The best solution cost we have found so far.
             base::Cost prevSolutionCost_{std::numeric_limits<double>::quiet_NaN()};
 
-            /** \brief The number of solutions allowed until the most optimal solution is returned. */
+            /// \brief The number of solutions allowed until the most optimal solution is returned.
             int batchSize_{1};
         };
     }
