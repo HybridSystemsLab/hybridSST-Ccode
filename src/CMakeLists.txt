@@ -1,7 +1,9 @@
 find_package(ompl REQUIRED)
 
 add_library(HySST HySST.cpp)
-target_link_libraries(HySST ${OMPL_LIBRARIES})
+add_library(HybridStateSpace HybridStateSpace.cpp)
+add_library(HybridTimeStateSpace HybridTimeStateSpace.cpp)
+target_link_libraries(HySST HybridStateSpace HybridTimeStateSpace ${OMPL_LIBRARIES})
 
 set(CMAKE_TOOLCHAIN_FILE ${VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake)
 
