@@ -10,6 +10,6 @@ read obstacles
 echo $x_index $y_index $z_index > "coordinate_indices.txt"
 echo $obstacles > "obstacles.txt"
 colcon build --packages-select visualize
+source install/local_setup.bash
 source /opt/ros/humble/setup.bash
 ros2 run visualize ros_visualize
-# ros2 run rviz2 rviz2

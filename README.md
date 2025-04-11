@@ -75,13 +75,11 @@ This repository provides the implementation of **HySST** in C++, compatible with
     ```
      cd examples/visualize
     ```
-  - If you would like to visualize multicopter example with obstacles, uncomment lines 208-210
   - Paste the trajectory matrix output from running `multicopter.cpp` or any other implementation of HySST into `points.txt`.
   - Run rosrun.bash, and follow the instructions within the terminal. Note that this visualization is limited to three dimentions. 
     ```
      ./rosrun.bash
     ```
-    ***Include different version for different Operating Systems...***
 
 ## 1. <span id="1">Document
 

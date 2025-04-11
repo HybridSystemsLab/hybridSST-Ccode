@@ -1,7 +1,7 @@
 /*********************************************************************
 * Software License Agreement (BSD License)
 *
-*  Copyright (c) 2024, University of Santa Cruz Hybrid Systems Laboratory
+*  Copyright (c) 2025, University of Santa Cruz Hybrid Systems Laboratory
 *  All rights reserved.
 *
 *  Redistribution and use in source and binary forms, with or without
@@ -35,16 +35,18 @@
 /* Authors: Beverly Xu */
 /* Adapted from: ompl/geometric/planners/src/SST.cpp by  Zakary Littlefield of Rutgers the State University of New Jersey, New Brunswick */
 
-#ifndef OMPL_GEOMETRIC_PLANNERS_SST_HySST_
-#define OMPL_GEOMETRIC_PLANNERS_SST_HySST_
+#ifndef OMPL_CONTROL_PLANNERS_SST_HySST_
+#define OMPL_CONTROL_PLANNERS_SST_HySST_
 
-#include "ompl/geometric/planners/PlannerIncludes.h"
+#include "ompl/control/planners/PlannerIncludes.h"
 #include "ompl/datastructures/NearestNeighbors.h"
 #include "ompl/control/Control.h"
+#include "ompl/control/spaces/RealVectorControlSpace.h"
+#include "HybridStateSpace.h"
 
 namespace ompl
 {
-    namespace geometric
+    namespace control
     {
         /**
            @anchor gHySST
@@ -60,7 +62,7 @@ namespace ompl
         {
         public:
             /** \brief Constructor */
-            HySST(const base::SpaceInformationPtr &si);
+            HySST(const control::SpaceInformationPtr &si);
 
             /** \brief Destructor */
             ~HySST() override;
@@ -79,7 +81,7 @@ namespace ompl
                 Motion() = default;
 
                 /// \brief Constructor that allocates memory for the state
-                Motion(const base::SpaceInformationPtr &si) : state(si->allocState()) {}
+                Motion(const control::SpaceInformation *si) : state(si->allocState()), control(si->allocControl()) {}
 
                 /// \brief Destructor
                 virtual ~Motion() = default;
@@ -115,10 +117,11 @@ namespace ompl
                 std::vector<base::State *> *solutionPair{nullptr};
 
                 /// \brief The inputs associated with the solution pair
-                std::vector<ompl::control::Control *> *inputs = new std::vector<ompl::control::Control *>();
+                // std::vector<ompl::control::Control *> *inputs = new std::vector<ompl::control::Control *>();
+                control::Control *control{nullptr};
 
                 /// \brief The hybrid time parameterizing each state in the solution pair
-                std::vector<std::pair<double, int>> *hybridTime = new std::vector<std::pair<double, int>>();
+                // std::vector<std::pair<double, int>> *hybridTime = new std::vector<std::pair<double, int>>();
             };
 
             /** 
@@ -343,7 +346,7 @@ namespace ompl
              * \brief Define the discrete dynamics simulator
              * @param function the discrete simulator associated with the hybrid system.
              */
-            void setDiscreteSimulator(std::function<base::State *(base::State *curState, std::vector<double> u, base::State *newState)> function)
+            void setDiscreteSimulator(std::function<base::State *(base::State *curState, const control::Control *u, base::State *newState)> function)
             {
                 discreteSimulator_ = function;
             }
@@ -352,18 +355,26 @@ namespace ompl
              * \brief Define the continuous dynamics simulator
              * @param function the continuous simulator associated with the hybrid system.
              */
-            void setContinuousSimulator(std::function<base::State *(std::vector<double> inputs, base::State *curState, double tFlowMax, 
+            void setContinuousSimulator(std::function<base::State *(const control::Control *u, base::State *curState, double tFlowMax, 
                                         base::State *newState)> function)
             {
                 continuousSimulator_ = function;
             }
+
+            
+            /** \brief Simulates the dynamics of the system. */
+            std::function<ompl::base::State *(const control::Control *control, ompl::base::State *x_cur, double tFlow, ompl::base::State *new_state)> continuousSimulator = [this](const control::Control *control, base::State *x_cur, double tFlow, base::State *new_state)
+            {
+                siC_->getStatePropagator()->propagate(x_cur, control, tFlow, new_state);
+                return new_state;
+            };
 
             /** 
              * \brief Define the collision checker
              * @param function the collision checker associated with the state space. Default is a point-by-point collision checker.
              */
             void setCollisionChecker(std::function<bool(Motion *motion, std::function<bool(Motion *motion)> obstacleSet, 
-                                     double ts, double tf, base::State *newState, double *collisionTime)> function)
+                                     base::State *newState, double *collisionTime)> function)
             {
                 collisionChecker_ = function;
             }
@@ -469,23 +480,33 @@ namespace ompl
                     throw Exception("Unsafe set not set");
                 if (tM_ < 0.0)
                     throw Exception("Max flow propagation time (Tm) not set");
-                if (maxJumpInputValue_.size() == 0)
-                    throw Exception("Max input value (maxJumpInputValue) not set");
-                if (minJumpInputValue_.size() == 0)
-                    throw Exception("Min input value (minJumpInputValue) not set");
-                if (maxFlowInputValue_.size() == 0)
-                    throw Exception("Max input value (maxFlowInputValue) not set");
-                if (minFlowInputValue_.size() == 0)
-                    throw Exception("Min input value (minFlowInputValue) not set");
-                if (!flowStepDuration_)
-                    throw Exception("Flow step length (flowStepDuration_) not set");
                 if (pruningRadius_ < 0)
                     throw Exception("Pruning radius (pruningRadius_) not set");
                 if (selectionRadius_ < 0)
                     throw Exception("Selection radius (selectionRadius_) not set");
             }
 
+            void setFlowInput(control::Control *control, double value)
+            {
+                control->as<CompoundControl>()->components[0]->as<RealVectorControlSpace::ControlType>()->values[0] = value;
+            }
+
+            void setJumpInput(control::Control *control, double value)
+            {
+                control->as<CompoundControl>()->components[1]->as<RealVectorControlSpace::ControlType>()->values[0] = value;
+            }
+
         protected:
+            const static ompl::control::Control *getFlowControl(const ompl::control::Control *control)
+            {
+                return control->as<CompoundControl>()->as<ompl::control::Control>(0);
+            }
+
+            const static ompl::control::Control *getJumpControl(const ompl::control::Control *control)
+            {
+                return control->as<CompoundControl>()->as<ompl::control::Control>(1);
+            }
+
             /// \brief Representation of a witness vertex in the search tree
             class Witness : public Motion
             {
@@ -494,7 +515,7 @@ namespace ompl
                 Witness() = default;
 
                 /// \brief Constructor that allocates memory for the state
-                Witness(const base::SpaceInformationPtr &si) : Motion(si) {}
+                Witness(const control::SpaceInformation *si) : Motion(si) {}
 
                 /** 
                  * \brief Get the state contained by the representative motion 
@@ -595,11 +616,10 @@ namespace ompl
              */
             std::function<bool(Motion *motion,
                                std::function<bool(Motion *motion)> obstacleSet,
-                               double ts, double tf, base::State *newState, double *collisionTime)>
+                               base::State *newState, double *collisionTime)>
                 collisionChecker_ =
                     [this](Motion *motion,
-                           std::function<bool(Motion *motion)> obstacleSet, double t = -1.0,
-                           double tf = -1.0, base::State *newState, double *collisionTime) -> bool
+                           std::function<bool(Motion *motion)> obstacleSet, base::State *newState, double *collisionTime) -> bool
             {
                 if (obstacleSet(motion))
                     return true;
@@ -608,6 +628,12 @@ namespace ompl
 
             /// \brief Name of input sampling method, default is "uniform"
             inputSamplingMethods_ inputSamplingMethod_{UNIFORM_01};
+
+            /// \brief Control Sampler
+            control::DirectedControlSamplerPtr controlSampler_;
+
+            /// \brief The base::SpaceInformation cast as control::SpaceInformation, for convenience
+            control::SpaceInformation *siC_;
 
             /** 
              * \brief Compute distance between states, default is Euclidean distance 
@@ -651,7 +677,7 @@ namespace ompl
              * @param newState The newly propagated state
              * @return The newly propagated state
              */
-            std::function<base::State *(base::State *curState, std::vector<double> u, base::State *newState)> discreteSimulator_;
+            std::function<base::State *(base::State *curState, const control::Control *u, base::State *newState)> discreteSimulator_;
 
             /** 
              * \brief Function that returns true if a motion intersects with the jump set, and false if not. 
@@ -688,7 +714,7 @@ namespace ompl
              * @param newState The newly propagated state
              * @return The newly propagated state
              */
-            std::function<base::State *(std::vector<double> input, base::State *curState, double tFlowMax, base::State *newState)> continuousSimulator_;
+            std::function<base::State *(const control::Control *u, base::State *curState, double tFlowMax, base::State *newState)> continuousSimulator_;
 
             /// \brief Random sampler for the input. Default constructor always seeds a different value, and returns a uniform real distribution.
             RNG *randomSampler_ = new RNG();
